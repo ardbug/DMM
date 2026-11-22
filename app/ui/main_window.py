@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
         self._error_code_dialog: ErrorCodeDialog | None = None
         self._floating_window: FloatingWindow | None = None
         self._floating_minimized_main = False
+        self._read_active = False
 
         self.setWindowTitle("34401A上位机")
         icon_path = Path(__file__).resolve().parents[2] / "icon.png"
@@ -294,6 +295,7 @@ class MainWindow(QMainWindow):
         self.controller.identity_received.connect(self._on_identity)
         self.controller.status_updated.connect(self._on_status)
         self.controller.reading_received.connect(self._on_reading)
+        self.controller.read_activity.connect(self._on_read_activity)
         self.controller.batch_received.connect(self._on_batch)
         self.controller.resources_listed.connect(self._on_resources)
         self.controller.error_occurred.connect(self._on_error)
@@ -693,6 +695,7 @@ class MainWindow(QMainWindow):
             self._floating_window.command_requested.connect(
                 self._on_floating_command
             )
+            self._floating_window.set_read_active(self._read_active)
             screen = self.screen().availableGeometry()
             self._floating_window.move(
                 screen.right() - self._floating_window.width() - 24,
@@ -708,6 +711,11 @@ class MainWindow(QMainWindow):
         if self.tool_panel.floating_minimize:
             self._floating_minimized_main = True
             self.showMinimized()
+
+    def _on_read_activity(self, active: bool) -> None:
+        self._read_active = active
+        if self._floating_window is not None:
+            self._floating_window.set_read_active(active)
 
     def _on_floating_command(self, command: str) -> None:
         if command == "BACK":

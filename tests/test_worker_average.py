@@ -43,7 +43,9 @@ def test_worker_averages_n_readings() -> None:
     )
     worker._config_version = 1
     batches = []
+    activity = []
     worker.batch_received.connect(batches.append)
+    worker.read_activity.connect(activity.append)
 
     worker._read_and_emit(1)
     worker._read_and_emit(1)
@@ -54,3 +56,4 @@ def test_worker_averages_n_readings() -> None:
     reading = batches[0].readings[0]
     assert reading.value == 2.0
     assert reading.raw == "AVG 3"
+    assert activity == [True, False, True, False, True, False]

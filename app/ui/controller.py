@@ -44,6 +44,7 @@ class SessionController(QObject):
     notice = Signal(str)
     config_applied = Signal(int, object)
     plan_updated = Signal(object)
+    read_activity = Signal(bool)
     rate_updated = Signal(object)
     stats_updated = Signal(object)
     csv_state = Signal(bool, str)
@@ -74,6 +75,7 @@ class SessionController(QObject):
         self.worker.notice.connect(self.notice.emit)
         self.worker.config_applied.connect(self.config_applied.emit)
         self.worker.plan_updated.connect(self.plan_updated.emit)
+        self.worker.read_activity.connect(self.read_activity.emit)
         self.worker.start()
 
     # ---------- 连接/配置 ----------

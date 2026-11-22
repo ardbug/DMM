@@ -77,6 +77,7 @@ class AcqWorker(QThread):
     notice = Signal(str)
     config_applied = Signal(int, object)
     plan_updated = Signal(object)
+    read_activity = Signal(bool)
 
     def __init__(self) -> None:
         super().__init__()
@@ -398,7 +399,13 @@ class AcqWorker(QThread):
 
     def _read_and_emit(self, count: int) -> None:
         assert self._dmm is not None
-        batch_read = self._dmm.read_batch(count, timeout_ms=self._read_timeout_ms())
+        self.read_activity.emit(True)
+        try:
+            batch_read = self._dmm.read_batch(
+                count, timeout_ms=self._read_timeout_ms()
+            )
+        finally:
+            self.read_activity.emit(False)
 
         readings = []
         last_ts = self._last_ts_ns
@@ -498,9 +505,15 @@ class AcqWorker(QThread):
         try:
             samples = []
             for _ in range(target):
-                samples.append(
-                    self._dmm.single_read(timeout_ms=self._read_timeout_ms())
-                )
+                self.read_activity.emit(True)
+                try:
+                    samples.append(
+                        self._dmm.single_read(
+                            timeout_ms=self._read_timeout_ms()
+                        )
+                    )
+                finally:
+                    self.read_activity.emit(False)
             last = samples[-1]
             if any(item.ovld for item in samples):
                 reading = replace(

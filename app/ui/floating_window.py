@@ -246,6 +246,18 @@ class FloatingWindow(QWidget):
         )
         self.label.setGeometry(self.rect())
 
+        self.read_star = QLabel("*", self)
+        self.read_star.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+        )
+        self.read_star.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.read_star.setStyleSheet(
+            "background: transparent; color: #54ccc0;"
+        )
+        self.read_star.hide()
+
         self._wheel = RadialWheel(None)
         self._wheel.selected.connect(self._on_wheel_selected)
 
@@ -266,9 +278,23 @@ class FloatingWindow(QWidget):
         font.setWeight(QFont.Weight.Bold)
         self.label.setFont(font)
         self.label.setGeometry(self.rect())
+        star_font = QFont("Consolas", 1)
+        star_font.setPixelSize(max(14, round(height * 0.20)))
+        star_font.setWeight(QFont.Weight.Bold)
+        self.read_star.setFont(star_font)
+        self.read_star.setGeometry(
+            10,
+            height - max(20, round(height * 0.24)) - 4,
+            max(24, round(width * 0.08)),
+            max(20, round(height * 0.24)),
+        )
+        self.read_star.raise_()
 
     def set_opacity_percent(self, percent: int) -> None:
         self.setWindowOpacity(max(0.2, min(1.0, int(percent) / 100.0)))
+
+    def set_read_active(self, active: bool) -> None:
+        self.read_star.setVisible(active)
 
     def refresh(self) -> None:
         text, unit, digits, ovld = self._readout.floating_snapshot()
