@@ -1,4 +1,4 @@
-# HP 34401A 上位机
+# Hewlett Packard 34401A 上位机
 
 Windows 桌面程序，用于 HP / Agilent / Keysight 34401A 台式万用表的串口通信、连续采集、趋势显示和 CSV 记录。
 
@@ -16,21 +16,6 @@ Windows 桌面程序，用于 HP / Agilent / Keysight 34401A 台式万用表的�
 - 平均值功能：每 N 次读数取平均后输出
 - 可置顶悬浮窗：读数、状态、右键六项功能轮盘
 - 曲线粗细、时间窗 PX / 5 s / 10 s / 30 s / 1 min / ALL TIME / 自定义
-
-## 运行
-
-```powershell
-cd "E:\deepseek work space\DMM\程序"
-.\启动.bat
-```
-
-或：
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe main.py
-```
 
 ## 34401A 串口设置
 
@@ -87,17 +72,9 @@ VDC_mmdd_hhmm.csv
 
 采用 UTF-8 BOM，Excel 可直接打开。
 
-## 测试
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-```
-
-当前测试：61 条。
-
 ## 说明
 
+- 所有代码都由AI编写，未经过完全验证
 - 程序不会修改注册表、环境变量或 Windows 电源设置。
 - 串口、功能和界面配置保存在用户配置目录。
 - GPIB 和多设备支持尚未实现。
-- 本项目使用 GPL-3.0 许可证，详见 [LICENSE](LICENSE)。
