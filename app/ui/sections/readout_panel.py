@@ -546,6 +546,19 @@ class ReadoutPanel(QFrame):
     def current_display_text(self) -> tuple[str, str]:
         return self.display._text.strip(), self.display.display_unit
 
+    def floating_statuses(self) -> dict[str, bool]:
+        label = self._status.function.label if self._status is not None else ""
+        return {
+            "Man": not self._auto_range,
+            "Math": self.chips["Null"].property("active") == "true",
+            "Rear": (
+                self._status is not None
+                and (self._status.terminal or "").upper() == "REAR"
+            ),
+            "Diode": label == "二极管",
+            "Cont": label == "导通",
+        }
+
     def floating_snapshot(self) -> tuple[str, str, str, bool]:
         """悬浮窗用：原始显示文本、单位、位数和 OVLD 状态。"""
 
