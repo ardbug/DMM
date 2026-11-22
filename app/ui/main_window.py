@@ -725,7 +725,10 @@ class MainWindow(QMainWindow):
             self.activateWindow()
             return
         if command == "NPLC":
-            self.dmm_panel.toggle_nplc_1_10()
+            if not self.dmm_panel.toggle_nplc_1_10():
+                self.statusBar().showMessage(
+                    "当前功能不支持 NPLC", 3000
+                )
             return
         if self.dmm_panel.select_function_raw(command):
             self.statusBar().showMessage(

@@ -275,12 +275,17 @@ class DmmPanel(QFrame):
         self.function_changed.emit(spec.raw)
         self._on_value_changed()
 
-    def toggle_nplc_1_10(self) -> None:
+    def toggle_nplc_1_10(self) -> bool:
+        # VAC/ACI/频率/周期/导通/二极管没有 NPLC 设置，不能绕过禁用控件。
+        if not self._supports_nplc:
+            return False
         current = float(self.nplc_combo.currentData())
         target = 10.0 if abs(current - 1.0) < 1e-9 else 1.0
         index = self.nplc_combo.findData(target)
-        if index >= 0:
-            self.nplc_combo.setCurrentIndex(index)
+        if index < 0:
+            return False
+        self.nplc_combo.setCurrentIndex(index)
+        return True
 
     def select_function_raw(self, raw: str) -> bool:
         if self._loading or self._switch_locked:
