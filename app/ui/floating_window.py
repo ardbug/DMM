@@ -281,7 +281,7 @@ class FloatingWindow(QWidget):
         )
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setStyleSheet(
-            "background: #05070a; color: #54ccc0;"
+            "background: #05070a; color: #49DEBC;"
         )
         self.label.setGeometry(self.rect())
 
@@ -293,7 +293,7 @@ class FloatingWindow(QWidget):
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
         self.read_star.setStyleSheet(
-            "background: transparent; color: #54ccc0;"
+            "background: transparent; color: #49DEBC;"
         )
         self.read_star.hide()
 
@@ -308,7 +308,7 @@ class FloatingWindow(QWidget):
         self.status_labels: dict[str, QLabel] = {}
         for text in ("Man", "Math", "Rear", "Diode", "Cont"):
             label = QLabel(text, self.status_row)
-            label.setStyleSheet("background: transparent; color: #54ccc0;")
+            label.setStyleSheet("background: transparent; color: #49DEBC;")
             label.hide()
             status_layout.addWidget(label)
             self.status_labels[text] = label
