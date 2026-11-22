@@ -5,7 +5,14 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPoint, QPointF, QRect, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPen
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetrics,
+    QMouseEvent,
+    QPainter,
+    QPen,
+)
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
 from app.ui.sections.readout_panel import ReadoutPanel
@@ -233,6 +240,8 @@ class FloatingWindow(QWidget):
         self._readout = readout
         self._percent = max(50, min(200, int(percent)))
         self._drag_offset: QPoint | None = None
+        self._read_active = False
+        self._warmup = False
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
@@ -278,6 +287,11 @@ class FloatingWindow(QWidget):
         self._wheel = RadialWheel(None)
         self._wheel.selected.connect(self._on_wheel_selected)
 
+        self._warmup_timer = QTimer(self)
+        self._warmup_timer.setSingleShot(True)
+        self._warmup_timer.setInterval(1000)
+        self._warmup_timer.timeout.connect(self._end_warmup)
+
         self._timer = QTimer(self)
         self._timer.setInterval(50)
         self._timer.timeout.connect(self.refresh)
@@ -299,32 +313,52 @@ class FloatingWindow(QWidget):
         star_font.setPixelSize(max(14, round(height * 0.20)))
         star_font.setWeight(QFont.Weight.Bold)
         self.read_star.setFont(star_font)
+        status_font = QFont("Consolas", 1)
+        status_font.setPixelSize(max(10, round(height * 0.115)))
+        for label in self.status_labels.values():
+            label.setFont(status_font)
+        self.status_row.show()
+        self.status_row.raise_()
+        self._position_overlays()
+
+    def set_opacity_percent(self, percent: int) -> None:
+        self.setWindowOpacity(max(0.2, min(1.0, int(percent) / 100.0)))
+
+    def _position_overlays(self) -> None:
+        """把 * 放在数值符号位正下方，状态文字排在它右侧。"""
+
+        width = self.width()
+        height = self.height()
+        text = self.label.text() or "-"
+        metrics = QFontMetrics(self.label.font())
+        text_width = metrics.horizontalAdvance(text)
+        text_left = max(0, (width - text_width) // 2)
+        sign_width = metrics.horizontalAdvance(text[0])
         star_height = max(20, round(height * 0.24))
         star_width = max(24, round(width * 0.08))
-        star_x = (width - star_width) // 2
+        star_x = text_left + sign_width // 2 - star_width // 2
+        star_x = max(2, min(width - star_width - 2, star_x))
         star_y = height - star_height - 4
         self.read_star.setGeometry(
             star_x, star_y, star_width, star_height
         )
         self.read_star.raise_()
-        status_font = QFont("Consolas", 1)
-        status_font.setPixelSize(max(10, round(height * 0.115)))
-        for label in self.status_labels.values():
-            label.setFont(status_font)
         self.status_row.setGeometry(
             star_x + star_width + 10,
             star_y,
             max(20, width - (star_x + star_width + 10) - 10),
             star_height,
         )
-        self.status_row.show()
         self.status_row.raise_()
 
-    def set_opacity_percent(self, percent: int) -> None:
-        self.setWindowOpacity(max(0.2, min(1.0, int(percent) / 100.0)))
-
     def set_read_active(self, active: bool) -> None:
-        self.read_star.setVisible(active)
+        self._read_active = active
+        if not self._warmup:
+            self.read_star.setVisible(active)
+
+    def _end_warmup(self) -> None:
+        self._warmup = False
+        self.refresh()
 
     def refresh(self) -> None:
         text, unit, digits, ovld = self._readout.floating_snapshot()
@@ -335,6 +369,13 @@ class FloatingWindow(QWidget):
             display = floating_text(text, unit, function_label, digits)
         if self.label.text() != display:
             self.label.setText(display)
+            self._position_overlays()
+        if self._warmup:
+            self.read_star.setVisible(True)
+            for label in self.status_labels.values():
+                label.setVisible(True)
+            return
+        self.read_star.setVisible(self._read_active)
         statuses = self._readout.floating_statuses()
         for text, label in self.status_labels.items():
             label.setVisible(bool(statuses.get(text)))
@@ -385,6 +426,11 @@ class FloatingWindow(QWidget):
         super().mouseMoveEvent(event)
 
     def showEvent(self, event) -> None:  # noqa: N802
+        self._warmup = True
+        self.read_star.setVisible(True)
+        for label in self.status_labels.values():
+            label.setVisible(True)
+        self._warmup_timer.start()
         self._timer.start()
         super().showEvent(event)
 
