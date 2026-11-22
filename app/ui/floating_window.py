@@ -337,7 +337,7 @@ class FloatingWindow(QWidget):
         self.resize(width, height)
         font = QFont("Consolas", 1)
         font.setPixelSize(max(20, round(height * 0.46)))
-        font.setWeight(QFont.Weight.Bold)
+        font.setWeight(QFont.Weight.Normal)
         self.label.setFont(font)
         self.label.setGeometry(self.rect())
         star_font = QFont("Consolas", 1)
