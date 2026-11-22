@@ -274,6 +274,7 @@ class FloatingWindow(QWidget):
         status_layout = QHBoxLayout(self.status_row)
         status_layout.setContentsMargins(0, 0, 0, 0)
         status_layout.setSpacing(8)
+        self.status_layout = status_layout
         self.status_labels: dict[str, QLabel] = {}
         for text in ("Man", "Math", "Rear", "Diode", "Cont"):
             label = QLabel(text, self.status_row)
@@ -313,10 +314,6 @@ class FloatingWindow(QWidget):
         star_font.setPixelSize(max(14, round(height * 0.20)))
         star_font.setWeight(QFont.Weight.Bold)
         self.read_star.setFont(star_font)
-        status_font = QFont("Consolas", 1)
-        status_font.setPixelSize(max(10, round(height * 0.115)))
-        for label in self.status_labels.values():
-            label.setFont(status_font)
         self.status_row.show()
         self.status_row.raise_()
         self._position_overlays()
@@ -343,12 +340,28 @@ class FloatingWindow(QWidget):
             star_x, star_y, star_width, star_height
         )
         self.read_star.raise_()
+        status_x = star_x + star_width + 10
+        available = max(20, width - status_x - 10)
         self.status_row.setGeometry(
-            star_x + star_width + 10,
-            star_y,
-            max(20, width - (star_x + star_width + 10) - 10),
-            star_height,
+            status_x, star_y, available, star_height
         )
+        # 状态文字按 4 个空格间距排布；空间不够时逐步缩小字号，
+        # 防止“全亮”1 秒时被裁掉。
+        base_size = max(9, round(height * 0.115))
+        for size in range(base_size, 7, -1):
+            font = QFont("Consolas", 1)
+            font.setPixelSize(size)
+            metrics = QFontMetrics(font)
+            spacing = metrics.horizontalAdvance(" ") * 4
+            total = sum(
+                metrics.horizontalAdvance(label.text())
+                for label in self.status_labels.values()
+            ) + spacing * (len(self.status_labels) - 1)
+            if total <= available:
+                break
+        for label in self.status_labels.values():
+            label.setFont(font)
+        self.status_layout.setSpacing(spacing)
         self.status_row.raise_()
 
     def set_read_active(self, active: bool) -> None:
