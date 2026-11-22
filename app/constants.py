@@ -1,0 +1,31 @@
+"""应用级常量。"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+APP_NAME = "34401A上位机"
+ORG_NAME = "DMM"
+VERSION = "0.5.0"
+
+# 程序目录：...\程序
+PROGRAM_DIR = Path(__file__).resolve().parent.parent
+LOG_DIR = PROGRAM_DIR / "logs"
+
+DEFAULT_RESOURCE = "ASRL6::INSTR"
+DEFAULT_BAUD_RATE = 9600
+DEFAULT_DATA_BITS = 7
+DEFAULT_PARITY = "even"
+DEFAULT_STOP_BITS = 2
+DEFAULT_FLOW_CONTROL = "dtr_dsr"
+DEFAULT_TIMEOUT_MS = 2000
+SINGLE_READ_TIMEOUT_MS = 3000
+HANDSHAKE_TIMEOUT_MS = 1500
+HANDSHAKE_RETRIES = 5
+HANDSHAKE_RETRY_DELAY_S = 0.3
+
+# 34401A 的超量程读数。
+OVLD_THRESHOLD = 9.9e37
+
+# 默认功能；阶段 1 只读取，不主动改仪器。
+DEFAULT_FUNCTION = "VOLT"
