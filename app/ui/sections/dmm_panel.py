@@ -275,6 +275,13 @@ class DmmPanel(QFrame):
         self.function_changed.emit(spec.raw)
         self._on_value_changed()
 
+    def toggle_nplc_1_10(self) -> None:
+        current = float(self.nplc_combo.currentData())
+        target = 10.0 if abs(current - 1.0) < 1e-9 else 1.0
+        index = self.nplc_combo.findData(target)
+        if index >= 0:
+            self.nplc_combo.setCurrentIndex(index)
+
     def select_function_raw(self, raw: str) -> bool:
         if self._loading or self._switch_locked:
             return False

@@ -13,12 +13,12 @@ from PySide6.QtGui import (
     QPainter,
     QPen,
 )
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolTip, QWidget
 
 from app.ui.sections.readout_panel import ReadoutPanel
 
-_WHEEL_OPTIONS = ("DCV", "CONT", "Ω2W", "DCI", "", "BACK")
-_WHEEL_COMMANDS = ("VOLT", "CONT", "RES", "CURR", "", "BACK")
+_WHEEL_OPTIONS = ("DCV", "CONT", "Ω2W", "DCI", "NPLC", "BACK")
+_WHEEL_COMMANDS = ("VOLT", "CONT", "RES", "CURR", "NPLC", "BACK")
 
 _UNIT_BY_FUNCTION = {
     "VDC": "VDC",
@@ -118,21 +118,51 @@ class RadialWheel(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setFixedSize(200, 200)
         self._hover = -1
+        self._hover_global = QPoint()
         self._center = QPointF(100, 100)
         self._inner_radius = 28.0
         self._outer_radius = 100.0
         self._hit_radius = 150.0
+        self._nplc_timer = QTimer(self)
+        self._nplc_timer.setSingleShot(True)
+        self._nplc_timer.setInterval(3000)
+        self._nplc_timer.timeout.connect(self._show_nplc_rule)
 
     def show_at(self, global_pos: QPoint) -> None:
         self.move(global_pos - QPoint(100, 100))
+        self._hover = -1
+        self._nplc_timer.stop()
+        QToolTip.hideText()
         self.show()
         self.raise_()
         self.grabMouse()
 
     def close_menu(self) -> None:
+        self._nplc_timer.stop()
+        QToolTip.hideText()
         if self.mouseGrabber() is self:
             self.releaseMouse()
         self.hide()
+
+    def _show_nplc_rule(self) -> None:
+        if self.isVisible() and self._hover == 3:
+            QToolTip.showText(
+                self._hover_global,
+                "NPLC：当前为 1 时切到 10，否则切到 1",
+                self,
+            )
+
+    def _update_hover(self, global_pos: QPoint) -> None:
+        self._hover_global = global_pos
+        hover = self._sector_at(global_pos)
+        self._hover = -1 if hover is None else hover
+        # NPLC 是逆时针旋转后 3 号扇区位置。
+        if hover == 3:
+            if not self._nplc_timer.isActive():
+                self._nplc_timer.start()
+        else:
+            self._nplc_timer.stop()
+            QToolTip.hideText()
 
     def _sector_at(self, global_pos: QPoint) -> int | None:
         local = self.mapFromGlobal(global_pos)
@@ -153,9 +183,9 @@ class RadialWheel(QWidget):
         self.close_menu()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        hover = self._sector_at(event.globalPosition().toPoint())
-        if hover != self._hover:
-            self._hover = -1 if hover is None else hover
+        old_hover = self._hover
+        self._update_hover(event.globalPosition().toPoint())
+        if self._hover != old_hover:
             self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802

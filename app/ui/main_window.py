@@ -724,6 +724,9 @@ class MainWindow(QMainWindow):
             self.raise_()
             self.activateWindow()
             return
+        if command == "NPLC":
+            self.dmm_panel.toggle_nplc_1_10()
+            return
         if self.dmm_panel.select_function_raw(command):
             self.statusBar().showMessage(
                 f"悬浮窗切换功能：{self.dmm_panel.current_config().function}",
