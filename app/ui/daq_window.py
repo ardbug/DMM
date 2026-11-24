@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -46,7 +47,7 @@ from app.domain.models import (
     Reading,
     SerialSettings,
 )
-from app.instrument.daq34970a import DaqConfig
+from app.instrument.daq34970a import DaqConfig, parse_channels
 from app.storage.csv_writer import CsvQueueFull, CsvWriter, make_csv_path
 from app.ui.sections.daq_panel import DaqConnectionPanel, DaqParamsPanel
 from app.ui.sections.readout_panel import ReadoutPanel
@@ -66,6 +67,9 @@ class DaqWindow(QMainWindow):
         self._last_config: DaqConfig | None = None
         self._batch_id = 0
         self._scan_rows: dict[int, int] = {}
+        self._active_channels: set[int] = {1}
+        self._reading_count = 0
+        self._rate_started_ns = 0
 
         title = "34970A 上位机"
         if instance > 1:
@@ -345,6 +349,32 @@ class DaqWindow(QMainWindow):
     def _close(self) -> None:
         self._worker.submit("close")
 
+    @staticmethod
+    def _config_channels(config: DaqConfig) -> set[int]:
+        if config.scan:
+            try:
+                return set(parse_channels(config.scan_list))
+            except ValueError:
+                return set()
+        return {config.channel}
+
+    def _reset_session(self, config: DaqConfig) -> None:
+        self._reading_count = 0
+        self._rate_started_ns = time.time_ns()
+        self._active_channels = self._config_channels(config)
+        self.readout.set_count(0)
+        self.readout.set_rate(None)
+        self.trend.clear()
+        self.scan_table.setRowCount(0)
+        self._scan_rows.clear()
+
+    def _update_rate(self) -> None:
+        if not self._rate_started_ns:
+            return
+        elapsed = (time.time_ns() - self._rate_started_ns) / 1e9
+        if elapsed > 0.2:
+            self.readout.set_rate(self._reading_count / elapsed)
+
     def _start(self, config: DaqConfig) -> None:
         self._last_config = config
         self.readout.set_daq_mode(True, config.nplc)
@@ -352,10 +382,7 @@ class DaqWindow(QMainWindow):
         if self._state == "acquiring":
             self._worker.submit("stop")
         else:
-            self.trend.clear()
-            if config.scan:
-                self.scan_table.setRowCount(0)
-                self._scan_rows.clear()
+            self._reset_session(config)
             self.output_tabs.setCurrentWidget(self.trend)
             self._worker.submit("start", config)
 
@@ -363,6 +390,17 @@ class DaqWindow(QMainWindow):
         config = self.params.config()
         self.readout.set_daq_mode(True, config.nplc)
         self.readout.set_daq_channels(self.params.selected_channel_count())
+        channels = self._config_channels(config)
+        if channels and channels != self._active_channels:
+            # 切换通道或扫描模式时，旧曲线不能继续留在图上。
+            self._active_channels = channels
+            self._reading_count = 0
+            self._rate_started_ns = time.time_ns()
+            self.readout.set_count(0)
+            self.readout.set_rate(None)
+            self.trend.clear()
+            self.scan_table.setRowCount(0)
+            self._scan_rows.clear()
         if self._state == "acquiring":
             self._config_timer.start()
 
@@ -426,6 +464,9 @@ class DaqWindow(QMainWindow):
             return
         channel = self._last_config.channel if self._last_config else 1
         self.trend.append_samples([(channel, reading)])
+        self._reading_count += 1
+        self.readout.set_count(self._reading_count)
+        self._update_rate()
         self._record_batch([reading])
 
     def _on_scan(self, samples) -> None:
@@ -456,6 +497,9 @@ class DaqWindow(QMainWindow):
             )
         self.scan_table.scrollToBottom()
         self.trend.append_samples(samples)
+        self._reading_count += len(samples)
+        self.readout.set_count(self._reading_count)
+        self._update_rate()
         last = samples[-1][1]
         self.readout.set_reading(last)
         self._record_batch(
