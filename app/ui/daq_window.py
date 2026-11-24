@@ -648,6 +648,7 @@ class DaqWindow(QMainWindow):
         batch = self._make_batch(readings)
         self._batch_id += 1
         if self._last_config is None or not self._last_config.scan:
+            first = batch.readings[0]
             self._single_ring.append_batch(batch)
             self._single_stats.add_batch(batch.readings)
             self.single_trend.set_function(first.function_label)
