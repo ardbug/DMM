@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.ui.widgets.common import ErrorBanner
+
 from app.acquisition.daq_worker import DaqWorker
 from app.acquisition.ring_buffer import RingBuffer
 from app.config import AppConfig
@@ -56,10 +58,13 @@ class DaqWindow(QMainWindow):
         self.resize(1200, 820)
 
         central = QWidget(self)
-        root = QHBoxLayout(central)
-        root.setContentsMargins(8, 8, 8, 8)
-        root.setSpacing(8)
+        outer = QVBoxLayout(central)
+        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setSpacing(6)
+        self.error_banner = ErrorBanner(central)
+        outer.addWidget(self.error_banner)
         splitter = QSplitter(Qt.Orientation.Horizontal, central)
+        outer.addWidget(splitter, 1)
         self.panel = DaqPanel(config, splitter)
         right = QSplitter(Qt.Orientation.Vertical, splitter)
         self.readout = ReadoutPanel(right)
@@ -71,7 +76,6 @@ class DaqWindow(QMainWindow):
         splitter.addWidget(self.panel)
         splitter.addWidget(right)
         splitter.setSizes([280, 900])
-        root.addWidget(splitter)
         self.setCentralWidget(central)
         self._splitter = splitter
 
@@ -180,8 +184,8 @@ class DaqWindow(QMainWindow):
         self.statusBar().showMessage(detail)
 
     def _on_error(self, title: str, detail: str) -> None:
+        self.error_banner.show_error(title, detail)
         self.statusBar().showMessage(f"{title}：{detail}", 8000)
-        QMessageBox.warning(self, title, detail)
 
     def _refresh_trend(self) -> None:
         self.trend.update()

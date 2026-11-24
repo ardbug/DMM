@@ -64,10 +64,14 @@ class Daq34970A:
     def open(self, settings: SerialSettings) -> str:
         self._io.open(settings)
         self.interface = settings.interface
-        if self.interface != "gpib":
-            self._io.write_line("SYST:REM")
-        self._io.write_line("*CLS")
-        self.identity = self._io.query_line("*IDN?", 5000)
+        try:
+            if self.interface != "gpib":
+                self._io.write_line("SYST:REM")
+            self._io.write_line("*CLS")
+            self.identity = self._io.query_line("*IDN?", 5000)
+        except Exception:
+            self._io.close()
+            raise
         self.status = _info("VOLT:DC", "DCV", "V")
         self.local_only = False
         return self.identity
