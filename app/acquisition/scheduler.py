@@ -43,9 +43,9 @@ def capability_for(
     if interface == "gpib":
         # 34401A 的 GPIB 读取上限高于串口；实际值由界面速率反馈。
         if nplc <= 0.02:
-            return 500.0 if not az else 300.0
+            return 1000.0 if not az else 500.0
         if nplc <= 0.2:
-            return 200.0 if not az else 120.0
+            return 300.0 if not az else 180.0
         if nplc <= 1.0:
             return 40.0 if not az else 25.0
         if nplc <= 10.0:
@@ -71,8 +71,18 @@ def plan_rate(
     )
     input_rate = max(0.001, min(config.rate, capability))
     effective = max(0.001, input_rate / average_count)
-    # period_ns 是内部每次 READ? 的间隔；平均 N 次后输出一条。
-    period_ns = max(1, int(1_000_000_000 / input_rate))
+    # GPIB 高速时一次 READ? 取多条，减少桥接和 SCPI 往返开销。
+    batch_size = 1
+    if (
+        interface == "gpib"
+        and average_count == 1
+        and input_rate >= 50.0
+    ):
+        batch_size = min(50, max(2, int(round(input_rate / 20.0))))
+    # period_ns 是两次 READ? 批次之间的间隔，不是批内每条读数的间隔。
+    period_ns = max(
+        1, int(batch_size * 1_000_000_000 / input_rate)
+    )
     limited = config.rate > capability + 1e-9
 
     note = ""
@@ -95,7 +105,7 @@ def plan_rate(
         requested=config.rate,
         effective=effective,
         capability=capability,
-        batch_size=1,
+        batch_size=batch_size,
         period_ns=period_ns,
         limited=limited,
         note=note,

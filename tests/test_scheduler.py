@@ -49,10 +49,11 @@ def test_gpib_has_higher_capability_than_serial() -> None:
         AcquisitionConfig(nplc=0.02, rate=1000, az=False),
         interface="gpib",
     )
-    assert plan.capability == 500
-    assert plan.effective == 500
-    assert plan.period_ns == 2_000_000
-    assert plan.limited is True
+    assert plan.capability == 1000
+    assert plan.effective == 1000
+    assert plan.batch_size == 50
+    assert plan.period_ns == 50_000_000
+    assert plan.limited is False
 
 
 def test_02_nplc_30hz_is_single_read() -> None:
