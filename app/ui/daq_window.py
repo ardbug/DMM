@@ -10,10 +10,16 @@ from pathlib import Path
 from PySide6.QtCore import QProcess, QTimer, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QMainWindow,
     QMessageBox,
+    QPushButton,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -78,8 +84,72 @@ class DaqWindow(QMainWindow):
         self.readout.set_daq_mode(True, 1.0)
         self.readout.set_daq_channels(1)
         self.trend = MultiChannelTrend(center)
+        self.trend_tab = QWidget(center)
+        trend_layout = QVBoxLayout(self.trend_tab)
+        trend_layout.setContentsMargins(0, 0, 0, 0)
+        trend_layout.setSpacing(4)
+        trend_controls = QHBoxLayout()
+        self.window_combo = QComboBox(self.trend_tab)
+        for label, value in (
+            ("PX 模式", "px"),
+            ("5 s", 5.0),
+            ("10 s", 10.0),
+            ("30 s", 30.0),
+            ("1 min", 60.0),
+            ("ALL TIME", "all"),
+        ):
+            self.window_combo.addItem(label, value)
+        self.window_combo.currentIndexChanged.connect(
+            lambda: self.trend.set_window_mode(
+                self.window_combo.currentData()
+            )
+        )
+        self.ovld_check = QCheckBox("OVLD 入图", self.trend_tab)
+        self.ovld_check.toggled.connect(self.trend.set_include_ovld)
+        self.pause_btn = QPushButton("暂停", self.trend_tab)
+        self.pause_btn.setCheckable(True)
+        self.pause_btn.toggled.connect(self._toggle_pause)
+        self.clear_btn = QPushButton("清空", self.trend_tab)
+        self.clear_btn.clicked.connect(self.trend.clear)
+        self.save_trend_btn = QPushButton("另存为", self.trend_tab)
+        self.save_trend_btn.clicked.connect(self._save_trend)
+        for widget in (
+            self.window_combo,
+            self.ovld_check,
+            self.pause_btn,
+            self.clear_btn,
+            self.save_trend_btn,
+        ):
+            trend_controls.addWidget(widget)
+        trend_controls.addStretch(1)
+        trend_layout.addLayout(trend_controls)
+        stats_grid = QGridLayout()
+        stats_grid.setHorizontalSpacing(10)
+        stats_grid.setVerticalSpacing(2)
+        self.trend_stats: dict[str, QLabel] = {}
+        for index, (key, caption) in enumerate(
+            (
+                ("min", "最小值"),
+                ("avg", "平均值"),
+                ("max", "最大值"),
+                ("cv", "离散系数"),
+                ("pp", "峰峰值"),
+                ("std", "标准差"),
+                ("count", "采样数"),
+                ("duration_s", "采样时间"),
+            )
+        ):
+            label = QLabel(f"{caption}：-", self.trend_tab)
+            label.setObjectName("Muted")
+            label.setStyleSheet("font-size: 11px;")
+            label.setMinimumWidth(0)
+            stats_grid.addWidget(label, index // 4, index % 4)
+            self.trend_stats[key] = label
+        trend_layout.addLayout(stats_grid)
+        trend_layout.addWidget(self.trend, 1)
+        self.trend.stats_changed.connect(self._update_trend_stats)
         self.output_tabs = QTabWidget(center)
-        self.output_tabs.addTab(self.trend, "趋势")
+        self.output_tabs.addTab(self.trend_tab, "趋势")
         self.scan_table = QTableWidget(0, 5, self.output_tabs)
         self.scan_table.setHorizontalHeaderLabels(
             ["通道", "功能", "读数", "单位", "时间"]
@@ -201,6 +271,44 @@ class DaqWindow(QMainWindow):
     def _single(self, config: DaqConfig) -> None:
         self._last_config = config
         self._worker.submit("single", config)
+
+    def _toggle_pause(self, paused: bool) -> None:
+        self.trend.set_paused(paused)
+        self.pause_btn.setText("继续" if paused else "暂停")
+
+    def _update_trend_stats(self, stats) -> None:
+        for key, label in self.trend_stats.items():
+            if key not in stats:
+                label.setText(f"{label.text().split('：')[0]}：-")
+                continue
+            value = stats[key]
+            caption = label.text().split("：")[0]
+            if key == "duration_s":
+                seconds = int(value)
+                text = (
+                    f"{seconds // 3600:02d}:"
+                    f"{seconds % 3600 // 60:02d}:"
+                    f"{seconds % 60:02d}"
+                )
+            elif key == "count":
+                text = str(value)
+            else:
+                text = f"{float(value):.6g}"
+            label.setText(f"{caption}：{text}")
+
+    def _save_trend(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "另存趋势数据",
+            str(self._config.csv_directory() / "34970A_trend.csv"),
+            "CSV 文件 (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            self.trend.save_csv(path)
+        except Exception as exc:
+            self._on_error("保存趋势失败", str(exc))
 
     def _on_reading(self, reading: Reading) -> None:
         self.readout.set_reading(reading)

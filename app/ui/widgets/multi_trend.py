@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import csv
+import math
 from collections import deque
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPointF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
@@ -17,28 +19,128 @@ _COLORS = (
 
 
 class MultiChannelTrend(QWidget):
+    stats_changed = Signal(object)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setMinimumHeight(260)
-        self._series: dict[int, deque[tuple[int, float]]] = {}
+        self.setMinimumHeight(220)
+        self._series: dict[int, deque[tuple[int, float, int]]] = {}
         self._seq = 0
-        self._max_points = 1200
+        self._max_points = 5000
+        self._paused = False
+        self._include_ovld = False
+        self._window_s: float | None = None
+        self._sample_count = 0
+        self._first_ts = 0
+        self._last_ts = 0
 
     def clear(self) -> None:
         self._series.clear()
         self._seq = 0
+        self._sample_count = 0
+        self._first_ts = 0
+        self._last_ts = 0
+        self.update()
+        self.stats_changed.emit(self.stats())
+
+    def set_paused(self, paused: bool) -> None:
+        self._paused = bool(paused)
+
+    def set_include_ovld(self, include: bool) -> None:
+        self._include_ovld = bool(include)
+
+    def set_window_mode(self, mode) -> None:
+        if mode == "px" or mode == "all":
+            self._window_s = None
+        else:
+            try:
+                self._window_s = float(mode)
+            except (TypeError, ValueError):
+                self._window_s = None
         self.update()
 
     def append_samples(self, samples) -> None:
+        if self._paused:
+            return
         self._seq += 1
         for channel, reading in samples:
-            if reading.ovld:
+            self._sample_count += 1
+            ts = int(reading.timestamp_ns or 0)
+            if not self._first_ts:
+                self._first_ts = ts
+            self._last_ts = ts
+            if reading.ovld and not self._include_ovld:
                 continue
+            value = float("nan") if reading.ovld else float(reading.value)
             series = self._series.setdefault(channel, deque())
-            series.append((self._seq, reading.value))
+            series.append((self._seq, value, ts))
             while len(series) > self._max_points:
                 series.popleft()
         self.update()
+        self.stats_changed.emit(self.stats())
+
+    def stats(self) -> dict[str, float | int]:
+        values = [
+            value
+            for series in self._series.values()
+            for _, value, _ in series
+            if math.isfinite(value)
+        ]
+        result: dict[str, float | int] = {
+            "count": self._sample_count,
+            "duration_s": (
+                (self._last_ts - self._first_ts) / 1_000_000_000
+                if self._first_ts and self._last_ts >= self._first_ts
+                else 0.0
+            ),
+        }
+        if not values:
+            return result
+        mean = sum(values) / len(values)
+        variance = sum((value - mean) ** 2 for value in values) / len(values)
+        result.update(
+            {
+                "min": min(values),
+                "max": max(values),
+                "avg": mean,
+                "std": math.sqrt(variance),
+                "pp": max(values) - min(values),
+                "cv": (
+                    math.sqrt(variance) / abs(mean) * 100
+                    if mean
+                    else 0.0
+                ),
+            }
+        )
+        return result
+
+    def save_csv(self, path: str) -> None:
+        with open(path, "w", newline="", encoding="utf-8-sig") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["channel", "sequence", "timestamp_ns", "value"])
+            for channel in sorted(self._series):
+                for seq, value, ts in self._series[channel]:
+                    writer.writerow(
+                        [
+                            channel,
+                            seq,
+                            ts,
+                            "" if not math.isfinite(value) else f"{value:.15g}",
+                        ]
+                    )
+
+    def _visible_series(self) -> dict[int, list[tuple[int, float, int]]]:
+        if self._window_s is None or not self._last_ts:
+            return {
+                channel: list(series)
+                for channel, series in self._series.items()
+            }
+        cutoff = self._last_ts - int(self._window_s * 1_000_000_000)
+        return {
+            channel: [item for item in series if item[2] >= cutoff]
+            for channel, series in self._series.items()
+            if any(item[2] >= cutoff for item in series)
+        }
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
@@ -58,12 +160,16 @@ class MultiChannelTrend(QWidget):
             x = plot_left + (plot_right - plot_left) * index / 5
             painter.drawLine(int(x), plot_top, int(x), plot_bottom)
         painter.setPen(QPen(QColor("#8b95a5"), 1))
-        painter.drawRect(plot_left, plot_top, plot_right - plot_left, plot_bottom - plot_top)
+        painter.drawRect(
+            plot_left, plot_top, plot_right - plot_left, plot_bottom - plot_top
+        )
 
+        visible = self._visible_series()
         values = [
             value
-            for series in self._series.values()
-            for _, value in series
+            for series in visible.values()
+            for _, value, _ in series
+            if math.isfinite(value)
         ]
         if not values:
             painter.setPen(QColor("#8b95a5"))
@@ -83,13 +189,20 @@ class MultiChannelTrend(QWidget):
                 (value - vmin) / (vmax - vmin)
             ) * (plot_bottom - plot_top)
 
-        seqs = [seq for series in self._series.values() for seq, _ in series]
-        smin, smax = min(seqs), max(seqs)
-        if smin == smax:
-            smax = smin + 1
-
-        def x_of(seq: int) -> float:
-            return plot_left + (seq - smin) / (smax - smin) * (
+        if self._window_s is not None:
+            xmin = self._last_ts - int(self._window_s * 1_000_000_000)
+            xmax = self._last_ts
+            if xmax <= xmin:
+                xmax = xmin + 1
+            x_of = lambda ts: plot_left + (ts - xmin) / (xmax - xmin) * (
+                plot_right - plot_left
+            )
+        else:
+            seqs = [seq for series in visible.values() for seq, _, _ in series]
+            smin, smax = min(seqs), max(seqs)
+            if smin == smax:
+                smax = smin + 1
+            x_of = lambda seq: plot_left + (seq - smin) / (smax - smin) * (
                 plot_right - plot_left
             )
 
@@ -104,29 +217,28 @@ class MultiChannelTrend(QWidget):
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                 f"{value:.5g}",
             )
-        painter.drawText(
-            plot_left,
-            plot_bottom + 12,
-            "扫描点",
-        )
+        painter.drawText(plot_left, plot_bottom + 12, "扫描点")
 
-        channels = sorted(self._series)
+        channels = sorted(visible)
         legend_x = plot_left
         for index, channel in enumerate(channels[:6]):
             color = _COLORS[index % len(_COLORS)]
             painter.setPen(QPen(color, 2))
             painter.drawLine(legend_x, 14, legend_x + 18, 14)
             painter.setPen(QColor("#4b5563"))
-            text = f"CH{channel}"
-            painter.drawText(legend_x + 22, 19, text)
+            painter.drawText(legend_x + 22, 19, f"CH{channel}")
             legend_x += 90
 
         for index, channel in enumerate(channels):
             color = _COLORS[index % len(_COLORS)]
             painter.setPen(QPen(color, 1.6))
             points = [
-                QPointF(x_of(seq), y_of(value))
-                for seq, value in self._series[channel]
+                QPointF(
+                    x_of(ts) if self._window_s is not None else x_of(seq),
+                    y_of(value),
+                )
+                for seq, value, ts in visible[channel]
+                if math.isfinite(value)
             ]
             if len(points) > 1:
                 painter.drawPolyline(points)
