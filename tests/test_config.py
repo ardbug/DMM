@@ -28,6 +28,18 @@ def test_acquisition_config_roundtrip_ignores_range(tmp_path) -> None:
     assert config.acquisition_config() == expected
 
 
+def test_tool_section_order_roundtrip(tmp_path) -> None:
+    config = AppConfig(tmp_path / "settings.ini")
+    assert config.tool_section_order() == []
+    config.save_tool_section_order(["floating", "csv", "average", "beep"])
+    assert config.tool_section_order() == [
+        "floating",
+        "csv",
+        "average",
+        "beep",
+    ]
+
+
 def test_floating_settings_roundtrip(tmp_path) -> None:
     config = AppConfig(tmp_path / "settings.ini")
     assert config.floating_settings() == (100, 100)

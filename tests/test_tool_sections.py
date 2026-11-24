@@ -33,3 +33,27 @@ def test_new_section_uses_collapsible_container() -> None:
     section = panel.add_section("未来工具")
     assert isinstance(section, CollapsibleSection)
     assert panel.sections[-1] is section
+
+
+def test_sections_move_up_and_down() -> None:
+    _app()
+    panel = ToolPanel()
+    orders = []
+    panel.section_order_changed.connect(orders.append)
+    first = panel.sections[0]
+    panel.move_section(first, 1)
+    assert panel.sections[1] is first
+    assert orders[-1] == [item.key for item in panel.sections]
+    assert panel.sections[-1].down_btn.isEnabled() is False
+    assert panel.sections[0].up_btn.isEnabled() is False
+
+
+def test_section_order_is_restored() -> None:
+    _app()
+    panel = ToolPanel(section_order=["beep", "average", "csv", "floating"])
+    assert [section.key for section in panel.sections] == [
+        "beep",
+        "average",
+        "csv",
+        "floating",
+    ]

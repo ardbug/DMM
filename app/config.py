@@ -185,6 +185,20 @@ class AppConfig:
         opacity = _int_value(self._settings.value("ui/floating_opacity"), 100)
         return max(50, min(200, percent)), max(20, min(100, opacity))
 
+    def tool_section_order(self) -> list[str]:
+        value = self._settings.value("ui/tool_section_order", [])
+        if isinstance(value, str):
+            value = [value]
+        if not isinstance(value, (list, tuple)):
+            return []
+        return [str(item) for item in value]
+
+    def save_tool_section_order(self, keys: list[str]) -> None:
+        self._settings.setValue(
+            "ui/tool_section_order", [str(key) for key in keys]
+        )
+        self._settings.sync()
+
     def save_floating_settings(self, percent: int, opacity: int) -> None:
         self._settings.setValue(
             "ui/floating_percent", max(50, min(200, int(percent)))

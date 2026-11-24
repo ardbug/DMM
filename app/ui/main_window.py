@@ -119,6 +119,10 @@ class MainWindow(QMainWindow):
             central,
             floating_percent=floating_percent,
             floating_opacity=floating_opacity,
+            section_order=self._config.tool_section_order(),
+        )
+        self.tool_panel.section_order_changed.connect(
+            self._config.save_tool_section_order
         )
         self.readout_panel = ReadoutPanel(central)
         self.trend_panel = TrendPanel(self.controller.ring, central)

@@ -31,22 +31,69 @@ class ToolPanel(QFrame):
     average_changed = Signal()
     floating_toggle_requested = Signal()
     floating_options_changed = Signal()
+    section_order_changed = Signal(list)
 
-    def add_section(self, title: str) -> CollapsibleSection:
+    def add_section(
+        self, title: str, key: str | None = None
+    ) -> CollapsibleSection:
         """新增工具区；以后加的工具区也统一使用可折叠容器。"""
-        section = CollapsibleSection(title, self)
+        section = CollapsibleSection(title, self, key=key)
+        section.move_requested.connect(
+            lambda delta, item=section: self.move_section(item, delta)
+        )
         index = self._root_layout.count()
         if index > 0 and self._root_layout.itemAt(index - 1).spacerItem():
             index -= 1
         self._root_layout.insertWidget(index, section)
         self.sections.append(section)
+        self._update_move_buttons()
         return section
+
+    def move_section(self, section: CollapsibleSection, delta: int) -> None:
+        if section not in self.sections:
+            return
+        source = self.sections.index(section)
+        target = source + delta
+        if target < 0 or target >= len(self.sections):
+            return
+        self.sections.pop(source)
+        self.sections.insert(target, section)
+        self._relayout_sections()
+        self._update_move_buttons()
+        self.section_order_changed.emit(
+            [item.key for item in self.sections]
+        )
+
+    def _relayout_sections(self) -> None:
+        for section in self.sections:
+            self._root_layout.removeWidget(section)
+        for index, section in enumerate(self.sections, start=1):
+            self._root_layout.insertWidget(index, section)
+
+    def _update_move_buttons(self) -> None:
+        last = len(self.sections) - 1
+        for index, section in enumerate(self.sections):
+            section.set_move_enabled(index > 0, index < last)
+
+    def _apply_section_order(self, keys: list[str]) -> None:
+        if not keys:
+            self._update_move_buttons()
+            return
+        by_key = {section.key: section for section in self.sections}
+        ordered = [by_key[key] for key in keys if key in by_key]
+        ordered.extend(
+            section for section in self.sections if section not in ordered
+        )
+        self.sections = ordered
+        self._relayout_sections()
+        self._update_move_buttons()
 
     def __init__(
         self,
         parent: QWidget | None = None,
         floating_percent: int = 100,
         floating_opacity: int = 100,
+        section_order: list[str] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("LeftPanel")
@@ -69,7 +116,7 @@ class ToolPanel(QFrame):
         title.setObjectName("SectionTitle")
         root.addWidget(title)
 
-        csv_group = self.add_section("数据记录")
+        csv_group = self.add_section("数据记录", "csv")
         csv_layout = csv_group.body_layout
         csv_layout.setSpacing(8)
         self.csv_btn = QPushButton("开始记录 CSV", csv_group)
@@ -91,7 +138,7 @@ class ToolPanel(QFrame):
         csv_layout.addWidget(self.csv_path_label)
         csv_layout.addWidget(self.folder_btn)
 
-        avg_group = self.add_section("平均值")
+        avg_group = self.add_section("平均值", "average")
         avg_layout = avg_group.body_layout
         avg_layout.setSpacing(7)
         self.avg_check = QPushButton("开启平均值", avg_group)
@@ -116,7 +163,7 @@ class ToolPanel(QFrame):
         avg_layout.addWidget(decimals_label)
         avg_layout.addWidget(self.avg_decimals_combo)
 
-        float_group = self.add_section("悬浮窗")
+        float_group = self.add_section("悬浮窗", "floating")
         float_layout = float_group.body_layout
         float_layout.setSpacing(7)
         self.floating_btn = QPushButton("开启悬浮窗", float_group)
@@ -151,7 +198,7 @@ class ToolPanel(QFrame):
         float_layout.addWidget(self.floating_opacity_spin)
         float_layout.addWidget(self.floating_minimize_check)
 
-        self.beep_group = self.add_section("2WΩ 软件蜂鸣")
+        self.beep_group = self.add_section("2WΩ 软件蜂鸣", "beep")
         beep_layout = self.beep_group.body_layout
         beep_layout.setSpacing(7)
         self.beep_check = QCheckBox("小于阈值时蜂鸣", self.beep_group)
@@ -187,6 +234,7 @@ class ToolPanel(QFrame):
         self.sections.remove(float_group)
         self.sections.insert(1, float_group)
         root.addStretch(1)
+        self._apply_section_order(section_order or [])
 
         self.beep_check.toggled.connect(self._emit_beeper)
         self.beep_threshold_spin.valueChanged.connect(self._emit_beeper)
