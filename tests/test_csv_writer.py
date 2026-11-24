@@ -16,6 +16,8 @@ def test_csv_path_is_compact_and_collision_safe(tmp_path) -> None:
     second = make_csv_path("VDC", tmp_path)
     assert second != path
     assert second.name.endswith("_02.csv")
+    named = make_csv_path("DCI", tmp_path, model="34401a")
+    assert named.name.startswith("34401a_DCI_")
 
 
 def test_csv_writer_writes_one_row_per_reading(tmp_path) -> None:
@@ -50,6 +52,9 @@ def test_csv_writer_writes_one_row_per_reading(tmp_path) -> None:
         rows = list(csv.reader(handle))
     assert rows[0][0] == "时间戳"
     assert len(rows) == 4
+    assert rows[0][6] == "通道"
+    assert "位数" not in rows[0]
     assert rows[1][5] == "VDC"
+    assert rows[1][6] == "1"
     assert rows[1][9] == "1"
     assert rows[1][11] == "0"

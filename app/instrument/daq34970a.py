@@ -250,12 +250,17 @@ class Daq34970A:
                         ovld=abs(value) >= OVLD_THRESHOLD,
                         raw=token,
                         timestamp_ns=stamp,
+                        channel=channel,
                     ),
                 )
             )
         return result
 
-    def read(self, timeout_ms: int = 5000) -> Reading:
+    def read(
+        self,
+        timeout_ms: int = 5000,
+        channel: int = 1,
+    ) -> Reading:
         raw = self._io.query_line("READ?", timeout_ms)
         try:
             value = float(raw)
@@ -269,6 +274,7 @@ class Daq34970A:
             ovld=abs(value) >= OVLD_THRESHOLD,
             raw=raw,
             timestamp_ns=0,
+            channel=channel,
         )
 
     def set_nplc(self, config: DaqConfig) -> None:

@@ -181,7 +181,10 @@ class DaqWorker(QThread):
                 if samples:
                     self.reading_received.emit(samples[-1][1])
                 return
-            reading = self._device.read(5000)
+            reading = self._device.read(
+                5000,
+                self._config.channel if self._config else 1,
+            )
             reading = reading.__class__(
                 value=reading.value,
                 unit=reading.unit,

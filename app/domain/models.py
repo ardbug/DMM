@@ -80,6 +80,7 @@ class Reading:
     raw: str
     timestamp_ns: int = 0
     average_count: int = 0
+    channel: int = 1
 
 
 @dataclass(frozen=True, slots=True)

@@ -159,7 +159,11 @@ class SessionController(QObject):
             return
         label = self._status.function.label if self._status else "DMM"
         try:
-            path = make_csv_path(label, self._config.csv_directory())
+            path = make_csv_path(
+                label,
+                self._config.csv_directory(),
+                model="34401a",
+            )
             writer = CsvWriter(path, self)
         except Exception as exc:
             self.error_occurred.emit("无法开始 CSV", str(exc))

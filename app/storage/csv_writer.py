@@ -22,9 +22,9 @@ _HEADER = [
     "批次开始",
     "批次结束",
     "功能",
+    "通道",
     "量程",
     "NPLC",
-    "位数",
     "读数",
     "单位",
     "OVLD",
@@ -45,15 +45,17 @@ def default_csv_dir() -> Path:
 def make_csv_path(
     function_label: str = "DMM",
     root: Path | None = None,
+    model: str = "",
 ) -> Path:
     root = root or default_csv_dir()
     root.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%m%d_%H%M")
     safe = "".join(ch if ch not in '\\/:*?"<>|' else "_" for ch in function_label)
-    candidate = root / f"{safe}_{stamp}.csv"
+    prefix = f"{model}_" if model else ""
+    candidate = root / f"{prefix}{safe}_{stamp}.csv"
     index = 2
     while candidate.exists():
-        candidate = root / f"{safe}_{stamp}_{index:02d}.csv"
+        candidate = root / f"{prefix}{safe}_{stamp}_{index:02d}.csv"
         index += 1
     return candidate
 
@@ -134,9 +136,9 @@ class CsvWriter(QThread):
                     start,
                     end,
                     reading.function_label,
+                    reading.channel,
                     batch.range_text,
                     nplc,
-                    batch.config.digits,
                     format(reading.value, ".15g"),
                     reading.unit,
                     1 if reading.ovld else 0,

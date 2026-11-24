@@ -639,6 +639,7 @@ class DaqWindow(QMainWindow):
             batch_id=self._batch_id,
             start_ns=first.timestamp_ns,
             end_ns=readings[-1].timestamp_ns,
+            range_text="AUTO",
         )
 
     def _record_batch(self, readings: list[Reading]) -> None:
@@ -694,7 +695,25 @@ class DaqWindow(QMainWindow):
             )
         else:
             label = "34970A"
-        path = make_csv_path(label, self._config.csv_directory())
+        function = (
+            self._last_config.function if self._last_config else "VOLT:DC"
+        )
+        token = {
+            "VOLT:DC": "VDC",
+            "VOLT:AC": "VAC",
+            "CURR:DC": "DCI",
+            "CURR:AC": "ACI",
+            "RES": "OHM",
+            "FRES": "OHM4",
+            "FREQ": "FREQ",
+            "PER": "PER",
+            "TEMP": "TEMP",
+        }.get(function, function.replace(":", "_"))
+        path = make_csv_path(
+            token,
+            self._config.csv_directory(),
+            model="34970a",
+        )
         writer = CsvWriter(path, self)
         writer.opened.connect(
             lambda value: self.panel.set_csv_state(True, str(value))
