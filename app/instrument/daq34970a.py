@@ -269,6 +269,24 @@ class Daq34970A:
             timestamp_ns=0,
         )
 
+    def set_display(self, on: bool) -> None:
+        self._io.write_line(f"DISP {'ON' if on else 'OFF'}")
+
+    def set_beeper(self, on: bool) -> None:
+        self._io.write_line(
+            f"SYST:BEEP:STAT {'ON' if on else 'OFF'}"
+        )
+
+    def set_remote(self, remote: bool) -> None:
+        if self.interface == "gpib":
+            method = getattr(
+                self._io, "remote" if remote else "local", None
+            )
+            if method is not None:
+                method()
+        else:
+            self._io.write_line("SYST:REM" if remote else "SYST:LOC")
+
     def close(self, restore_local: bool = True) -> None:
         if not self.is_open:
             return

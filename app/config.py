@@ -209,6 +209,16 @@ class AppConfig:
         self._settings.setValue("ui/scale_percent", int(percent))
         self._settings.sync()
 
+    def daq_window_percent(self) -> int:
+        value = _int_value(
+            self._settings.value("ui/daq_window_percent"), 100
+        )
+        return value if value in {75, 100, 125, 150, 200} else 100
+
+    def save_daq_window_percent(self, percent: int) -> None:
+        self._settings.setValue("ui/daq_window_percent", int(percent))
+        self._settings.sync()
+
     def floating_settings(self) -> tuple[int, int]:
         percent = _int_value(self._settings.value("ui/floating_percent"), 100)
         opacity = _int_value(self._settings.value("ui/floating_opacity"), 100)

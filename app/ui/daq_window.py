@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QTimer, Qt
-from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QCloseEvent,
+    QIcon,
+    QKeySequence,
+)
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -67,7 +74,7 @@ class DaqWindow(QMainWindow):
         icon_path = Path(__file__).resolve().parents[2] / "icon.png"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
-        self.resize(1200, 820)
+        self._apply_window_scale(self._config.daq_window_percent())
 
         central = QWidget(self)
         outer = QVBoxLayout(central)
@@ -191,6 +198,58 @@ class DaqWindow(QMainWindow):
         window_menu.addAction(action_34401)
         window_menu.addAction(action_34970)
 
+        view_menu = self.menuBar().addMenu("视图(&V)")
+        interface_menu = view_menu.addMenu("界面缩放")
+        self.interface_group = QActionGroup(self)
+        self.interface_group.setExclusive(True)
+        current_interface_scale = self._config.scale_factor()
+        for percent in (75, 100, 125, 150, 200):
+            action = QAction(f"{percent}%", self)
+            action.setCheckable(True)
+            action.setChecked(percent == current_interface_scale)
+            action.triggered.connect(
+                lambda _checked=False, value=percent:
+                self._set_interface_scale(value)
+            )
+            self.interface_group.addAction(action)
+            interface_menu.addAction(action)
+
+        size_menu = view_menu.addMenu("尺寸缩放")
+        self.size_group = QActionGroup(self)
+        self.size_group.setExclusive(True)
+        current_window_scale = self._config.daq_window_percent()
+        for percent in (75, 100, 125, 150, 200):
+            action = QAction(f"{percent}%", self)
+            action.setCheckable(True)
+            action.setChecked(percent == current_window_scale)
+            action.triggered.connect(
+                lambda _checked=False, value=percent:
+                self._apply_saved_window_scale(value)
+            )
+            self.size_group.addAction(action)
+            size_menu.addAction(action)
+
+        instrument_menu = self.menuBar().addMenu("仪器控制(&I)")
+        self.rmt_action = QAction("RMT 远程控制", self)
+        self.rmt_action.setCheckable(True)
+        self.rmt_action.setChecked(self._config.remote_enabled())
+        self.rmt_action.toggled.connect(self._on_rmt)
+        instrument_menu.addAction(self.rmt_action)
+        self.display_action = QAction("VFD 显示", self)
+        self.display_action.setCheckable(True)
+        self.display_action.setChecked(
+            self._config.instrument_switches()[0]
+        )
+        self.display_action.toggled.connect(self._on_display)
+        instrument_menu.addAction(self.display_action)
+        self.beeper_action = QAction("蜂鸣器", self)
+        self.beeper_action.setCheckable(True)
+        self.beeper_action.setChecked(
+            self._config.instrument_switches()[1]
+        )
+        self.beeper_action.toggled.connect(self._on_beeper)
+        instrument_menu.addAction(self.beeper_action)
+
         self.panel.open_requested.connect(self._open)
         self.panel.close_requested.connect(self._close)
         self.params.config_changed.connect(self._on_config_changed)
@@ -217,6 +276,57 @@ class DaqWindow(QMainWindow):
         self._timer.setInterval(200)
         self._timer.timeout.connect(self._refresh_trend)
         self._timer.start()
+
+    def _apply_window_scale(self, percent: int) -> None:
+        self.resize(
+            max(600, round(1200 * percent / 100)),
+            max(400, round(820 * percent / 100)),
+        )
+
+    def _apply_saved_window_scale(self, percent: int) -> None:
+        self._config.save_daq_window_percent(percent)
+        self._apply_window_scale(percent)
+
+    def _set_interface_scale(self, percent: int) -> None:
+        self._config.save_scale_factor(percent)
+        os.environ["QT_SCALE_FACTOR"] = f"{percent / 100:g}"
+        answer = QMessageBox.question(
+            self,
+            "界面缩放",
+            f"已设置为 {percent}%。\n需要重启程序才能生效。\n\n现在重启吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        ok = QProcess.startDetached(
+            sys.executable,
+            sys.argv,
+            str(Path.cwd()),
+        )
+        if not ok:
+            QMessageBox.warning(self, "重启失败", "请手动重启程序。")
+            return
+        QTimer.singleShot(150, self.close)
+
+    def _on_rmt(self, enabled: bool) -> None:
+        self._config.save_remote_enabled(enabled)
+        if self._state in {"ready", "acquiring"}:
+            self._worker.submit("remote", enabled)
+
+    def _on_display(self, enabled: bool) -> None:
+        self._config.save_instrument_switches(
+            enabled, self.beeper_action.isChecked()
+        )
+        if self._state in {"ready", "acquiring"}:
+            self._worker.submit("display", enabled)
+
+    def _on_beeper(self, enabled: bool) -> None:
+        self._config.save_instrument_switches(
+            self.display_action.isChecked(), enabled
+        )
+        if self._state in {"ready", "acquiring"}:
+            self._worker.submit("beeper", enabled)
 
     def _open(self, settings: SerialSettings) -> None:
         self._config.save_serial_settings(settings)

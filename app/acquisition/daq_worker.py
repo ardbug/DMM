@@ -113,6 +113,18 @@ class DaqWorker(QThread):
             if self._device.status is not None:
                 self.status_updated.emit(self._device.status)
             self._read_once()
+        elif kind == "display":
+            if self._device is None:
+                raise RuntimeError("34970A 未打开")
+            self._device.set_display(bool(payload))
+        elif kind == "beeper":
+            if self._device is None:
+                raise RuntimeError("34970A 未打开")
+            self._device.set_beeper(bool(payload))
+        elif kind == "remote":
+            if self._device is None:
+                raise RuntimeError("34970A 未打开")
+            self._device.set_remote(bool(payload))
         elif kind == "shutdown":
             self._acquiring = False
             device, self._device = self._device, None
