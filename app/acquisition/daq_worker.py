@@ -33,17 +33,37 @@ class DaqWorker(QThread):
 
     def run(self) -> None:
         while not self._shutdown:
-            try:
-                kind, payload = self._commands.get(timeout=0.05)
-            except queue.Empty:
-                if self._acquiring:
-                    self._step()
-                continue
-            try:
-                self._handle(kind, payload)
-            except Exception as exc:
-                self.error_occurred.emit("34970A 操作失败", str(exc))
-                self._set_state("error", str(exc))
+            if self._acquiring:
+                self._read_once()
+                period = 1.0 / max(
+                    0.1,
+                    float(self._config.rate) if self._config else 1.0,
+                )
+                deadline = time.monotonic() + max(0.05, period)
+                while time.monotonic() < deadline and self._acquiring:
+                    try:
+                        kind, payload = self._commands.get(
+                            timeout=min(
+                                0.05,
+                                max(0.0, deadline - time.monotonic()),
+                            )
+                        )
+                    except queue.Empty:
+                        continue
+                    self._dispatch(kind, payload)
+            else:
+                try:
+                    kind, payload = self._commands.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                self._dispatch(kind, payload)
+
+    def _dispatch(self, kind: str, payload) -> None:
+        try:
+            self._handle(kind, payload)
+        except Exception as exc:
+            self.error_occurred.emit("34970A 操作失败", str(exc))
+            self._set_state("error", str(exc))
 
     def _handle(self, kind: str, payload) -> None:
         if kind == "open":
@@ -82,14 +102,11 @@ class DaqWorker(QThread):
             self._read_once()
         elif kind == "shutdown":
             self._acquiring = False
+            device, self._device = self._device, None
+            if device is not None:
+                device.close()
+            self._set_state("disconnected", "34970A 已关闭")
             self._shutdown = True
-
-    def _step(self) -> None:
-        if self._device is None or self._config is None:
-            return
-        self._read_once()
-        period = 1.0 / max(0.1, float(self._config.rate))
-        time.sleep(max(0.05, period))
 
     def _read_once(self) -> None:
         assert self._device is not None
@@ -116,6 +133,5 @@ class DaqWorker(QThread):
         self.state_changed.emit(state, detail)
 
     def shutdown(self) -> None:
-        self._shutdown = True
         self._commands.put(("shutdown", None))
-        self.wait(3000)
+        self.wait(6000)

@@ -65,7 +65,11 @@ class Daq34970A:
         self._io.open(settings)
         self.interface = settings.interface
         try:
-            if self.interface != "gpib":
+            if self.interface == "gpib":
+                remote = getattr(self._io, "remote", None)
+                if remote is not None:
+                    remote()
+            else:
                 self._io.write_line("SYST:REM")
             self._io.write_line("*CLS")
             self.identity = self._io.query_line("*IDN?", 5000)

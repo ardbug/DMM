@@ -10,6 +10,7 @@
  *   R:<timeout>       read response only           -> O:<response>
  *   W:<scpi>          write command without reading -> O:
  *   L                 GPIB go-to-local               -> O:
+ *   M                 GPIB remote                    -> O:
  *   X                 close and exit
  *
  * Errors are reported as E:<sicl-status>.
@@ -70,6 +71,15 @@ int main(int argc, char **argv)
         }
         if (kind == 'L') {
             status = ilocal(id);
+            if (status < 0) {
+                printf("E:%d\n", status);
+            } else {
+                printf("O:\n");
+            }
+            continue;
+        }
+        if (kind == 'M') {
+            status = iremote(id);
             if (status < 0) {
                 printf("E:%d\n", status);
             } else {

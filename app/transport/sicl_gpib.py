@@ -99,6 +99,9 @@ class SiclBridge:
     def local(self) -> None:
         self._command("L")
 
+    def remote(self) -> None:
+        self._command("M")
+
     def close(self) -> None:
         if self.alive:
             try:
@@ -233,6 +236,12 @@ class SiclGpibIO:
         if self._bridge is None:
             raise SiclGpibError("GPIB 未打开")
         self._bridge.local()
+
+    def remote(self) -> None:
+        """GPIB 远程使能，避免仪器停在 local 后 READ? 报 550。"""
+        if self._bridge is None:
+            raise SiclGpibError("GPIB 未打开")
+        self._bridge.remote()
 
     @staticmethod
     def list_resources() -> list[str]:
