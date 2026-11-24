@@ -66,8 +66,9 @@ class Dmm:
         self.interface = settings.interface
         self.local_only = False
         try:
-            # 手册 P161：先进入远程，再清状态，再握手。
-            self._io.write_line("SYST:REM")
+            # SYST:REM 是 RS-232 专用；GPIB 被寻址时自动进入远程。
+            if self.interface != "gpib":
+                self._io.write_line("SYST:REM")
             self._io.write_line("*CLS")
             self.identity = self._handshake(attempts, handshake_timeout_ms)
             self.status = self.read_status()
@@ -115,7 +116,8 @@ class Dmm:
         except Exception:
             log.debug("清缓冲失败", exc_info=True)
         try:
-            self._io.write_line("SYST:REM")
+            if self.interface != "gpib":
+                self._io.write_line("SYST:REM")
             self._io.write_line("*CLS")
         except Exception:
             log.debug("重新进入远程失败", exc_info=True)
@@ -138,9 +140,14 @@ class Dmm:
         try:
             # 前后端状态单独查询；前后都 flush，避免残留响应污染 READ?。
             self._io.flush()
-            raw_terminal = self._io.query_line("ROUT:TERM?", 3000).strip().upper()
-            if raw_terminal in {"FRON", "REAR"}:
-                terminal = raw_terminal
+            raw_terminal = (
+                self._io.query_line("ROUT:TERM?", 3000)
+                .strip()
+                .strip('"')
+                .upper()
+            )
+            if raw_terminal in {"FRON", "FRONT", "REAR"}:
+                terminal = "REAR" if raw_terminal == "REAR" else "FRON"
         except Exception:
             log.warning("查询前后端失败，按前端处理", exc_info=True)
         finally:
@@ -353,7 +360,8 @@ class Dmm:
         time.sleep(0.3)
         try:
             self._io.flush()
-            self._io.write_line("SYST:REM")
+            if self.interface != "gpib":
+                self._io.write_line("SYST:REM")
             self._io.write_line("*CLS")
             time.sleep(0.2)
             idn = self._io.query_line("*IDN?", HANDSHAKE_TIMEOUT_MS)
@@ -376,9 +384,15 @@ class Dmm:
                 # 34401A 的写法是 "DISPlay ON"（空格），不是 "DISPlay:ON"。
                 # 实测 "DISPLAY:ON" 会留下 -113 Undefined header。
                 self._io.write_line("DISP ON")
-                self._io.write_line("SYST:LOC")
+                if self.interface == "gpib":
+                    local = getattr(self._io, "local", None)
+                    if local is not None:
+                        local()
+                    log.info("已发送 DISP ON / GPIB GTL")
+                else:
+                    self._io.write_line("SYST:LOC")
+                    log.info("已发送 DISP ON / SYST:LOC")
                 time.sleep(0.1)
-                log.info("已发送 DISP ON / SYST:LOC")
             except Exception:
                 log.warning("回本地失败，请按面板 Shift+Local", exc_info=True)
         self._io.close()

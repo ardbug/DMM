@@ -9,6 +9,7 @@
  *   Q:[timeout:]scpi  write command, read response -> O:<response>
  *   R:<timeout>       read response only           -> O:<response>
  *   W:<scpi>          write command without reading -> O:
+ *   L                 GPIB go-to-local               -> O:
  *   X                 close and exit
  *
  * Errors are reported as E:<sicl-status>.
@@ -66,6 +67,15 @@ int main(int argc, char **argv)
         kind = (char)toupper((unsigned char)line[0]);
         if (kind == 'X') {
             break;
+        }
+        if (kind == 'L') {
+            status = ilocal(id);
+            if (status < 0) {
+                printf("E:%d\n", status);
+            } else {
+                printf("O:\n");
+            }
+            continue;
         }
         if (length < 2) {
             continue;

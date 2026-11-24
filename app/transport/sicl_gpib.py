@@ -96,6 +96,9 @@ class SiclBridge:
     def read(self, timeout_ms: int) -> str:
         return self._command(f"R:{max(1, int(timeout_ms))}")
 
+    def local(self) -> None:
+        self._command("L")
+
     def close(self) -> None:
         if self.alive:
             try:
@@ -224,6 +227,12 @@ class SiclGpibIO:
     def clear(self) -> None:
         # 与 flush 相同：恢复流程由 Dmm.recover() 的命令负责。
         return
+
+    def local(self) -> None:
+        """GPIB 的 GTL（go to local），替代串口专用的 SYST:LOC。"""
+        if self._bridge is None:
+            raise SiclGpibError("GPIB 未打开")
+        self._bridge.local()
 
     @staticmethod
     def list_resources() -> list[str]:
