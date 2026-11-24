@@ -31,6 +31,7 @@ class ErrorCodeDialog(QDialog):
         top.addWidget(QLabel("机型：", self))
         self.model_combo = QComboBox(self)
         self.model_combo.addItem("34401A", "34401A")
+        self.model_combo.addItem("34970A", "34970A")
         top.addWidget(self.model_combo)
         top.addSpacing(8)
         self.search = QLineEdit(self)
