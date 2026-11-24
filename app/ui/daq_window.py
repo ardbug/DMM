@@ -458,7 +458,6 @@ class DaqWindow(QMainWindow):
         self.trend.append_samples(samples)
         last = samples[-1][1]
         self.readout.set_reading(last)
-        self.output_tabs.setCurrentWidget(self.trend)
         self._record_batch(
             [
                 replace(

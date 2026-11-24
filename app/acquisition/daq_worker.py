@@ -88,6 +88,7 @@ class DaqWorker(QThread):
             self._device = device
             self._set_state("ready", "34970A 已连接")
         elif kind == "close":
+            self._acquiring = False
             device, self._device = self._device, None
             if device is not None:
                 device.close()
@@ -165,4 +166,5 @@ class DaqWorker(QThread):
 
     def shutdown(self) -> None:
         self._commands.put(("shutdown", None))
-        self.wait(6000)
+        # 扫描一次最多可能等待 15 s，不能在读线程仍运行时销毁对象。
+        self.wait(20000)

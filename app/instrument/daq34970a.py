@@ -162,9 +162,10 @@ class Daq34970A:
             )
         else:
             self._io.write_line(f"CONF:{config.function} (@{channel})")
-            self._io.write_line(
-                f"SENS:{config.function}:NPLC {config.nplc:g},(@{channel})"
-            )
+            if config.function not in {"FREQ", "PER"}:
+                self._io.write_line(
+                    f"SENS:{config.function}:NPLC {config.nplc:g},(@{channel})"
+                )
             self.status = InstrumentStatus(
                 function=_FUNCTIONS.get(config.function, _FUNCTIONS["VOLT:DC"]),
                 nplc=f"{config.nplc:g}",
@@ -199,9 +200,10 @@ class Daq34970A:
             info = _FUNCTIONS["TEMP"]
         else:
             self._io.write_line(f"CONF:{config.function} (@{channel_spec})")
-            self._io.write_line(
-                f"SENS:{config.function}:NPLC {config.nplc:g},(@{channel_spec})"
-            )
+            if config.function not in {"FREQ", "PER"}:
+                self._io.write_line(
+                    f"SENS:{config.function}:NPLC {config.nplc:g},(@{channel_spec})"
+                )
             info = _FUNCTIONS.get(config.function, _FUNCTIONS["VOLT:DC"])
         self._io.write_line(f"ROUT:SCAN (@{channel_spec})")
         self._scan_spec = channel_spec
