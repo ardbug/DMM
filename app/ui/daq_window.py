@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from app.ui.widgets.common import ErrorBanner
 
 from app.acquisition.daq_worker import DaqWorker
-from app.acquisition.ring_buffer import RingBuffer
+
 from app.config import AppConfig
 from app.domain.models import (
     AcquisitionConfig,
@@ -37,7 +37,6 @@ from app.instrument.daq34970a import DaqConfig
 from app.storage.csv_writer import CsvQueueFull, CsvWriter, make_csv_path
 from app.ui.sections.daq_panel import DaqConnectionPanel, DaqParamsPanel
 from app.ui.sections.readout_panel import ReadoutPanel
-from app.ui.sections.trend_panel import TrendPanel
 from app.ui.widgets.multi_trend import MultiChannelTrend
 
 
@@ -47,7 +46,7 @@ class DaqWindow(QMainWindow):
         self._config = config
         self._instance = instance
         self._state = "disconnected"
-        self._ring = RingBuffer()
+
         self._worker = DaqWorker()
         self._csv: CsvWriter | None = None
         self._csv_path: Path | None = None
@@ -78,11 +77,9 @@ class DaqWindow(QMainWindow):
         self.readout = ReadoutPanel(center)
         self.readout.set_daq_mode(True, 1.0)
         self.readout.set_daq_channels(1)
-        self.trend = TrendPanel(self._ring, center)
+        self.trend = MultiChannelTrend(center)
         self.output_tabs = QTabWidget(center)
-        self.output_tabs.addTab(self.trend, "单通道趋势")
-        self.scan_trend = MultiChannelTrend(self.output_tabs)
-        self.output_tabs.addTab(self.scan_trend, "多通道趋势")
+        self.output_tabs.addTab(self.trend, "趋势")
         self.scan_table = QTableWidget(0, 5, self.output_tabs)
         self.scan_table.setHorizontalHeaderLabels(
             ["通道", "功能", "读数", "单位", "时间"]
@@ -175,11 +172,11 @@ class DaqWindow(QMainWindow):
         if self._state == "acquiring":
             self._worker.submit("stop")
         else:
+            self.trend.clear()
             if config.scan:
-                self.scan_trend.clear()
                 self.scan_table.setRowCount(0)
                 self._scan_rows.clear()
-                self.output_tabs.setCurrentWidget(self.scan_trend)
+            self.output_tabs.setCurrentWidget(self.trend)
             self._worker.submit("start", config)
 
     def _on_config_changed(self) -> None:
@@ -209,9 +206,8 @@ class DaqWindow(QMainWindow):
         self.readout.set_reading(reading)
         if self._last_config is not None and self._last_config.scan:
             return
-        self.trend.set_function(reading.function_label)
-        self.trend.set_unit(reading.unit)
-        self.trend.set_measurement_state("acquiring")
+        channel = self._last_config.channel if self._last_config else 1
+        self.trend.append_samples([(channel, reading)])
         self._record_batch([reading])
 
     def _on_scan(self, samples) -> None:
@@ -241,10 +237,10 @@ class DaqWindow(QMainWindow):
                 ),
             )
         self.scan_table.scrollToBottom()
-        self.scan_trend.append_samples(samples)
+        self.trend.append_samples(samples)
         last = samples[-1][1]
         self.readout.set_reading(last)
-        self.output_tabs.setCurrentWidget(self.scan_trend)
+        self.output_tabs.setCurrentWidget(self.trend)
         self._record_batch(
             [
                 replace(
@@ -273,7 +269,6 @@ class DaqWindow(QMainWindow):
             end_ns=readings[-1].timestamp_ns,
         )
         self._batch_id += 1
-        self._ring.append_batch(batch)
         if self._csv is not None:
             try:
                 self._csv.enqueue(batch)
@@ -286,7 +281,7 @@ class DaqWindow(QMainWindow):
         self.panel.set_state(state, detail)
         self.params.set_state(state)
         self.readout.set_state(state, detail)
-        self.trend.set_measurement_state(state)
+
         self.statusBar().showMessage(detail)
 
     def _on_error(self, title: str, detail: str) -> None:

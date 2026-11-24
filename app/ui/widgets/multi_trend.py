@@ -45,7 +45,7 @@ class MultiChannelTrend(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), QColor("#ffffff"))
 
-        left, top, right, bottom = 58, 42, 18, 34
+        left, top, right, bottom = 66, 42, 18, 34
         plot_left = left
         plot_top = top
         plot_right = max(plot_left + 20, self.width() - right)
@@ -102,7 +102,7 @@ class MultiChannelTrend(QWidget):
             painter.drawText(
                 4, int(y) + 5, plot_left - 8, 18,
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                f"{value:.6g}",
+                f"{value:.5g}",
             )
         painter.drawText(
             plot_left,
