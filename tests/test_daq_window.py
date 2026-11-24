@@ -20,4 +20,23 @@ def test_daq_window_builds_with_gpib_default(tmp_path) -> None:
     config = window.params.config()
     assert config.scan is True
     assert config.scan_list.startswith("101,102,103")
+    assert window._config.daq_parameters()["scan"] is True
     window.close()
+
+
+def test_daq_parameters_are_persisted(tmp_path) -> None:
+    _app()
+    path = tmp_path / "daq_params.ini"
+    config = AppConfig(path, instance=1)
+    window = DaqWindow(config)
+    window.params.channel.setValue(102)
+    window.params.nplc.setCurrentIndex(
+        window.params.nplc.findData(10.0)
+    )
+    window.params.scan_rate.setValue(2.5)
+    window.close()
+
+    loaded = AppConfig(path, instance=1).daq_parameters()
+    assert loaded["channel"] == 102
+    assert loaded["nplc"] == 10.0
+    assert loaded["scan_rate"] == 2.5

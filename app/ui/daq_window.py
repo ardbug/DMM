@@ -67,6 +67,7 @@ class DaqWindow(QMainWindow):
         self._state = "disconnected"
         self._single_ring = RingBuffer()
         self._single_stats = StatsAccumulator()
+        self._channel_rings: dict[int, RingBuffer] = {}
 
         self._worker = DaqWorker()
         self._csv: CsvWriter | None = None
@@ -96,7 +97,7 @@ class DaqWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal, central)
         outer.addWidget(splitter, 1)
         self.panel = DaqConnectionPanel(config, splitter)
-        self.params = DaqParamsPanel(splitter)
+        self.params = DaqParamsPanel(config, splitter)
         center = QSplitter(Qt.Orientation.Vertical, splitter)
         self.readout = ReadoutPanel(center)
         self.readout.set_daq_mode(True, 1.0)
@@ -391,7 +392,9 @@ class DaqWindow(QMainWindow):
         self.readout.set_rate(None)
         self.trend.clear()
         self._single_ring.clear()
+        self._channel_rings.clear()
         self._single_stats.reset()
+        self.single_trend.set_overlay_rings({}, None)
         self.single_trend.clear_view()
         self.single_trend.set_stats(self._single_stats.snapshot())
         self.single_trend.set_measurement_state("disconnected")
@@ -400,13 +403,14 @@ class DaqWindow(QMainWindow):
         self._select_trend_page(config)
 
     def _select_trend_page(self, config: DaqConfig) -> None:
-        self.trend_stack.setCurrentWidget(
-            self.multi_page if config.scan else self.single_trend
-        )
+        # 单通道和多通道都使用 34401A 的 TrendPanel；扫描只是多叠几条线。
+        self.trend_stack.setCurrentWidget(self.single_trend)
 
     def _clear_single_trend(self) -> None:
         self._single_ring.clear()
+        self._channel_rings.clear()
         self._single_stats.reset()
+        self.single_trend.set_overlay_rings({}, None)
         self.single_trend.clear_view()
         self.single_trend.set_stats(self._single_stats.snapshot())
         self.readout.set_count(0)
@@ -472,7 +476,9 @@ class DaqWindow(QMainWindow):
             self.readout.set_rate(None)
             self.trend.clear()
             self._single_ring.clear()
+            self._channel_rings.clear()
             self._single_stats.reset()
+            self.single_trend.set_overlay_rings({}, None)
             self.single_trend.clear_view()
             self.single_trend.set_stats(self._single_stats.snapshot())
             self.scan_table.setRowCount(0)
@@ -570,12 +576,12 @@ class DaqWindow(QMainWindow):
                 ),
             )
         self.scan_table.scrollToBottom()
-        self.trend.append_samples(samples)
         self._reading_count += len(samples)
         self.readout.set_count(self._reading_count)
         self._update_rate()
         last = samples[-1][1]
         self.readout.set_reading(last)
+        self._append_scan_trend(samples)
         self._record_batch(
             [
                 replace(
@@ -586,23 +592,56 @@ class DaqWindow(QMainWindow):
             ]
         )
 
-    def _record_batch(self, readings: list[Reading]) -> None:
-        if not readings:
+    def _append_scan_trend(self, samples) -> None:
+        if not samples:
             return
-        first = readings[0]
-        config = AcquisitionConfig(
-            function=first.function_label,
-            nplc=float(self._last_config.nplc) if self._last_config else 1.0,
-            rate=float(self._last_config.rate) if self._last_config else 1.0,
+        primary_channel = sorted(channel for channel, _ in samples)[0]
+        primary_reading = None
+        for channel, reading in samples:
+            ring = self._channel_rings.setdefault(channel, RingBuffer())
+            batch = self._make_batch([reading])
+            ring.append_batch(batch)
+            self._single_stats.add_batch((reading,))
+            if channel == primary_channel:
+                primary_reading = reading
+        if primary_reading is None:
+            return
+        self.single_trend.set_function(primary_reading.function_label)
+        self.single_trend.set_unit(primary_reading.unit)
+        self.single_trend.set_measurement_state("acquiring")
+        self.single_trend.notify_data(self._make_batch([primary_reading]))
+        self.single_trend.set_overlay_rings(
+            self._channel_rings, primary_channel
         )
-        batch = Batch(
+        self.single_trend.set_stats(self._single_stats.snapshot())
+
+    def _make_batch(self, readings: list[Reading]) -> Batch:
+        first = readings[0]
+        return Batch(
             readings=tuple(readings),
-            config=config,
+            config=AcquisitionConfig(
+                function=first.function_label,
+                nplc=(
+                    float(self._last_config.nplc)
+                    if self._last_config
+                    else 1.0
+                ),
+                rate=(
+                    float(self._last_config.rate)
+                    if self._last_config
+                    else 1.0
+                ),
+            ),
             config_version=1,
             batch_id=self._batch_id,
             start_ns=first.timestamp_ns,
             end_ns=readings[-1].timestamp_ns,
         )
+
+    def _record_batch(self, readings: list[Reading]) -> None:
+        if not readings:
+            return
+        batch = self._make_batch(readings)
         self._batch_id += 1
         if self._last_config is None or not self._last_config.scan:
             self._single_ring.append_batch(batch)

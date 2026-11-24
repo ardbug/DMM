@@ -219,6 +219,37 @@ class AppConfig:
         self._settings.setValue("ui/daq_window_percent", int(percent))
         self._settings.sync()
 
+    def daq_parameters(self) -> dict[str, object]:
+        s = self._settings
+        return {
+            "channel": _int_value(s.value("daq/channel"), 101),
+            "function": str(s.value("daq/function", "VOLT:DC")),
+            "nplc": _float_value(s.value("daq/nplc"), 1.0),
+            "temperature": str(s.value("daq/temperature", "TC:K")),
+            "temp_unit": str(s.value("daq/temp_unit", "C")),
+            "rate": _float_value(s.value("daq/rate"), 1.0),
+            "scan": _bool_value(s.value("daq/scan"), False),
+            "scan_list": str(s.value("daq/scan_list", "101:110")),
+            "scan_rate": _float_value(s.value("daq/scan_rate"), 1.0),
+        }
+
+    def save_daq_parameters(self, parameters: dict[str, object]) -> None:
+        s = self._settings
+        for key in (
+            "channel",
+            "function",
+            "nplc",
+            "temperature",
+            "temp_unit",
+            "rate",
+            "scan",
+            "scan_list",
+            "scan_rate",
+        ):
+            if key in parameters:
+                s.setValue(f"daq/{key}", parameters[key])
+        s.sync()
+
     def floating_settings(self) -> tuple[int, int]:
         percent = _int_value(self._settings.value("ui/floating_percent"), 100)
         opacity = _int_value(self._settings.value("ui/floating_opacity"), 100)

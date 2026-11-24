@@ -484,6 +484,14 @@ class TrendPanel(QFrame):
     def set_min_y_step(self, value: float) -> None:
         self.chart.set_min_y_step(value)
 
+    def set_overlay_rings(
+        self,
+        rings: dict[int, "RingBuffer"],
+        primary_channel: int | None = None,
+    ) -> None:
+        """34970A 扫描时叠加其他通道，单通道时传空字典。"""
+        self.chart.set_overlay_rings(rings, primary_channel)
+
     def set_stats(self, snapshot) -> None:
         self._last_stats = snapshot
         if self._selection_summary is None:

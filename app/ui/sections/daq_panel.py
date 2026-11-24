@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from app.config import AppConfig
 from app.domain.models import SerialSettings
-from app.instrument.daq34970a import DaqConfig
+from app.instrument.daq34970a import DaqConfig, parse_channels
 from app.ui.dialogs.serial_dialog import SerialDialog
 from app.ui.widgets.themed_combo import ThemedComboBox
 
@@ -195,8 +195,13 @@ class DaqConnectionPanel(QFrame):
 class DaqParamsPanel(QFrame):
     config_changed = Signal()
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        config: AppConfig | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._config = config
         self.setObjectName("LeftPanel")
         self.setMinimumWidth(255)
         self.setMaximumWidth(330)
@@ -291,21 +296,75 @@ class DaqParamsPanel(QFrame):
 
         root.addStretch(1)
 
+        self._load_saved_parameters()
         self.channel.valueChanged.connect(self._sync_channel)
         self.scan_check.toggled.connect(self._sync_scan)
         self.function.currentIndexChanged.connect(self._sync_function)
-        self.scan_list.itemChanged.connect(self.config_changed)
-        self.function.currentIndexChanged.connect(self.config_changed)
-        self.temp_sensor.currentIndexChanged.connect(self.config_changed)
-        self.temp_unit.currentIndexChanged.connect(self.config_changed)
-        self.nplc.currentIndexChanged.connect(self.config_changed)
-        self.rate.valueChanged.connect(self.config_changed)
-        self.scan_rate.valueChanged.connect(self.config_changed)
-        self.channel.valueChanged.connect(self.config_changed)
-        self.scan_check.toggled.connect(self.config_changed)
+        self.scan_list.itemChanged.connect(self._persist_parameters)
+        self.function.currentIndexChanged.connect(self._persist_parameters)
+        self.temp_sensor.currentIndexChanged.connect(self._persist_parameters)
+        self.temp_unit.currentIndexChanged.connect(self._persist_parameters)
+        self.nplc.currentIndexChanged.connect(self._persist_parameters)
+        self.rate.valueChanged.connect(self._persist_parameters)
+        self.scan_rate.valueChanged.connect(self._persist_parameters)
+        self.channel.valueChanged.connect(self._persist_parameters)
+        self.scan_check.toggled.connect(self._persist_parameters)
         self._sync_scan()
         self._sync_function()
         self._sync_channel()
+
+    def _load_saved_parameters(self) -> None:
+        if self._config is None:
+            return
+        values = self._config.daq_parameters()
+        self.channel.setValue(
+            min(122, max(101, int(values["channel"])))
+        )
+        function_index = self.function.findData(values["function"])
+        if function_index >= 0:
+            self.function.setCurrentIndex(function_index)
+        nplc_index = self.nplc.findData(float(values["nplc"]))
+        if nplc_index >= 0:
+            self.nplc.setCurrentIndex(nplc_index)
+        temp_index = self.temp_sensor.findData(values["temperature"])
+        if temp_index >= 0:
+            self.temp_sensor.setCurrentIndex(temp_index)
+        unit_index = self.temp_unit.findData(values["temp_unit"])
+        if unit_index >= 0:
+            self.temp_unit.setCurrentIndex(unit_index)
+        self.rate.setValue(float(values["rate"]))
+        self.scan_rate.setValue(float(values["scan_rate"]))
+        self.scan_check.setChecked(bool(values["scan"]))
+        try:
+            selected = set(parse_channels(str(values["scan_list"])))
+        except ValueError:
+            selected = set(range(101, 111))
+        for index in range(self.scan_list.count()):
+            item = self.scan_list.item(index)
+            channel = int(item.data(Qt.ItemDataRole.UserRole))
+            item.setCheckState(
+                Qt.CheckState.Checked
+                if channel in selected
+                else Qt.CheckState.Unchecked
+            )
+
+    def _persist_parameters(self) -> None:
+        if self._config is not None:
+            config = self.config()
+            self._config.save_daq_parameters(
+                {
+                    "channel": config.channel,
+                    "function": config.function,
+                    "nplc": config.nplc,
+                    "temperature": config.temperature,
+                    "temp_unit": config.temp_unit,
+                    "rate": config.rate,
+                    "scan": config.scan,
+                    "scan_list": config.scan_list,
+                    "scan_rate": config.scan_rate,
+                }
+            )
+        self.config_changed.emit()
 
     def _sync_scan(self) -> None:
         scan = self.scan_check.isChecked()
@@ -349,7 +408,7 @@ class DaqParamsPanel(QFrame):
         for index in range(self.scan_list.count()):
             self.scan_list.item(index).setCheckState(state)
         self.scan_list.blockSignals(False)
-        self.config_changed.emit()
+        self._persist_parameters()
 
     def _scan_channels(self) -> str:
         channels = sorted(

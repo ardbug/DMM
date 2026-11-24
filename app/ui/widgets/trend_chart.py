@@ -56,8 +56,11 @@ class TrendChart(QWidget):
         self._effective_span_s = 10.0
         self.all_time = False
         self.px_mode = False
+        self._px_stretch = False
         self.ovld_visible = False
         self.paused = False
+        self._overlay_rings: dict[int, RingBuffer] = {}
+        self._primary_channel: int | None = None
         self._hover: QPoint | None = None
         self._drag_start: QPoint | None = None
         self._drag_current: QPoint | None = None
@@ -142,6 +145,15 @@ class TrendChart(QWidget):
 
     def set_display_end_ns(self, timestamp_ns: int | None) -> None:
         self._display_end_ns = timestamp_ns
+
+    def set_overlay_rings(
+        self,
+        rings: dict[int, RingBuffer],
+        primary_channel: int | None = None,
+    ) -> None:
+        self._overlay_rings = dict(rings)
+        self._primary_channel = primary_channel
+        self.update()
 
     def set_line_width(self, width: float) -> None:
         self.line_width = max(1.0, min(4.0, float(width)))
@@ -293,8 +305,17 @@ class TrendChart(QWidget):
             y_max += y_step
 
         if self.px_mode:
-            x_start = float(self._plot.right() - max(0, len(samples) - 1))
-            x_end = float(self._plot.right())
+            # PX 模式原本是一点一像素；低采样率（34970A 1 Hz）会把曲线
+            # 挤在右边。样本不足一屏时自动铺满宽度，34401A 高速数据不受影响。
+            self._px_stretch = len(samples) <= max(2, self._plot.width())
+            if self._px_stretch:
+                x_start = 0.0
+                x_end = 1.0
+            else:
+                x_start = float(
+                    self._plot.right() - max(0, len(samples) - 1)
+                )
+                x_end = float(self._plot.right())
         else:
             x_end = float(samples[-1][1])
             if self.all_time:
@@ -312,6 +333,10 @@ class TrendChart(QWidget):
 
         def map_x(ts: int, index: int) -> float:
             if self.px_mode:
+                if self._px_stretch:
+                    return self._plot.left() + (
+                        index / max(1, len(samples) - 1)
+                    ) * self._plot.width()
                 return float(self._plot.right() - (len(samples) - 1 - index))
             return self._plot.left() + ((ts - x_start) / x_span) * self._plot.width()
 
@@ -346,7 +371,14 @@ class TrendChart(QWidget):
             x = self._plot.left() + self._plot.width() * index / 10
             painter.drawLine(int(x), self._plot.top(), int(x), self._plot.bottom())
             if self.px_mode:
-                sample_index = len(samples) - 1 - int(round(self._plot.right() - x))
+                if self._px_stretch:
+                    sample_index = int(
+                        round(index / 10 * max(0, len(samples) - 1))
+                    )
+                else:
+                    sample_index = len(samples) - 1 - int(
+                        round(self._plot.right() - x)
+                    )
                 label = str(sample_index + 1) if sample_index >= 0 else "—"
             else:
                 ts = int(x_start + step_s * index * 1_000_000_000)
@@ -452,6 +484,47 @@ class TrendChart(QWidget):
                 painter.drawPolyline(QPolygonF(points))
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
+        # 34970A 多通道叠加：主通道蓝色，其余黄/绿/粉。
+        overlay_colors = (
+            QColor("#eab308"),
+            QColor("#16a34a"),
+            QColor("#ec4899"),
+        )
+        overlay_index = 0
+        for channel in sorted(self._overlay_rings):
+            if channel == self._primary_channel:
+                continue
+            ring = self._overlay_rings[channel]
+            if self.px_mode:
+                overlay = list(ring.iter_ordered())[-max(1, len(samples)):]
+                offset = max(0, len(samples) - len(overlay))
+                overlay_points = [
+                    QPointF(
+                        map_x(0, offset + index),
+                        map_y(value),
+                    )
+                    for index, (value, _ts, ovld) in enumerate(overlay)
+                    if not ovld and math.isfinite(value)
+                ]
+            else:
+                overlay = ring.slice_by_time(int(x_start), int(x_end))
+                overlay_points = [
+                    QPointF(map_x(ts, 0), map_y(value))
+                    for value, ts, ovld in overlay
+                    if not ovld and math.isfinite(value)
+                ]
+            color = overlay_colors[overlay_index % len(overlay_colors)]
+            overlay_index += 1
+            overlay_pen = QPen(color)
+            overlay_pen.setWidthF(self.line_width)
+            overlay_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            overlay_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(overlay_pen)
+            if len(overlay_points) >= 2:
+                painter.drawPolyline(QPolygonF(overlay_points))
+            elif overlay_points:
+                painter.drawPoint(overlay_points[0])
+
         # 框选：已完成的区间保持淡色，拖动中再画选框。
         if self._selection is not None:
             left = int(min(self._selection[0], self._selection[1]))
@@ -527,7 +600,11 @@ class TrendChart(QWidget):
         )
         y_div_text = f"{plain_number(y_axis_step, y_decimals)} {self.unit}/div"
         if self.px_mode:
-            x_div_text = f"{max(1, round(self._plot.width() / 10))} 样本/div"
+            if self._px_stretch:
+                per_div = max(1, round(len(samples) / 10))
+            else:
+                per_div = max(1, round(self._plot.width() / 10))
+            x_div_text = f"{per_div} 样本/div"
         else:
             x_div_text = f"{plain_number(step_s, 3)} s/div"
         status = f"{y_div_text}    {mode} · {self.unit}    {x_div_text}"
@@ -541,12 +618,49 @@ class TrendChart(QWidget):
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
             status,
         )
+        if self._overlay_rings:
+            metrics = QFontMetrics(QFont(self.font().family(), 8))
+            legend_x = 8 + metrics.horizontalAdvance(status) + 14
+            legend_y = self._plot.bottom() + 33
+            channels = []
+            if self._primary_channel is not None:
+                channels.append(self._primary_channel)
+            channels.extend(
+                channel
+                for channel in sorted(self._overlay_rings)
+                if channel != self._primary_channel
+            )
+            colors = [line_color, QColor("#eab308"), QColor("#16a34a"), QColor("#ec4899")]
+            for index, channel in enumerate(channels):
+                color = colors[min(index, len(colors) - 1)]
+                text = f"CH{channel}"
+                width = metrics.horizontalAdvance(text) + 22
+                if legend_x + width > self.width() - 6:
+                    break
+                painter.setPen(QPen(color, 2))
+                painter.drawLine(
+                    int(legend_x), legend_y - 4, int(legend_x) + 12, legend_y - 4
+                )
+                painter.setPen(muted)
+                painter.drawText(
+                    int(legend_x) + 15,
+                    legend_y,
+                    text,
+                )
+                legend_x += width
         self.last_paint_ms = (time.perf_counter() - paint_started) * 1000.0
 
     def _nearest_index(self, samples: list[tuple[float, int, bool]], mouse_x: int) -> int | None:
         if not samples:
             return None
         if self.px_mode:
+            if self._px_stretch:
+                index = round(
+                    (mouse_x - self._plot.left())
+                    / max(1, self._plot.width())
+                    * max(0, len(samples) - 1)
+                )
+                return max(0, min(len(samples) - 1, index))
             index = len(samples) - 1 - round(self._plot.right() - mouse_x)
             if index < 0:
                 return None
