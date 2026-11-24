@@ -102,6 +102,7 @@ class DaqWindow(QMainWindow):
         self.readout = ReadoutPanel(center)
         self.readout.set_daq_mode(True, 1.0)
         self.readout.set_daq_channels(1)
+        self.readout.set_digits("6½")
         self.trend_tab = QWidget(center)
         trend_layout = QVBoxLayout(self.trend_tab)
         trend_layout.setContentsMargins(0, 0, 0, 0)
@@ -182,6 +183,9 @@ class DaqWindow(QMainWindow):
         multi_layout.addLayout(stats_grid)
         multi_layout.addWidget(self.trend, 1)
         self.trend.stats_changed.connect(self._update_trend_stats)
+        self.readout.resolution_changed.connect(
+            self.single_trend.set_min_y_step
+        )
         self.single_trend.clear_requested.connect(self._clear_single_trend)
         self.single_trend.save_requested.connect(self._save_single_trend)
         self.single_trend.record_requested.connect(self._record_single_trend)
