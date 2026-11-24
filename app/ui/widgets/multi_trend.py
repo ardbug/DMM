@@ -147,13 +147,15 @@ class MultiChannelTrend(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), QColor("#ffffff"))
 
-        left, top, right, bottom = 66, 42, 18, 34
+        left, top, right, bottom = 66, 42, 18, 52
         plot_left = left
         plot_top = top
         plot_right = max(plot_left + 20, self.width() - right)
         plot_bottom = max(plot_top + 20, self.height() - bottom)
 
-        painter.setPen(QPen(QColor("#d8dde5"), 1))
+        grid_pen = QPen(QColor("#d8dde5"), 1)
+        grid_pen.setStyle(Qt.PenStyle.DotLine)
+        painter.setPen(grid_pen)
         for index in range(6):
             y = plot_top + (plot_bottom - plot_top) * index / 5
             painter.drawLine(plot_left, int(y), plot_right, int(y))
@@ -209,15 +211,60 @@ class MultiChannelTrend(QWidget):
         font = QFont("Consolas", 9)
         painter.setFont(font)
         painter.setPen(QColor("#5f6875"))
+        span = vmax - vmin
+        decimals = max(
+            0,
+            min(9, -int(math.floor(math.log10(span))) + 1)
+            if span > 0
+            else 6,
+        )
         for index in range(6):
-            value = vmax - (vmax - vmin) * index / 5
+            value = vmax - span * index / 5
             y = plot_top + (plot_bottom - plot_top) * index / 5
             painter.drawText(
                 4, int(y) + 5, plot_left - 8, 18,
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                f"{value:.5g}",
+                f"{value:.{decimals}f}",
             )
-        painter.drawText(plot_left, plot_bottom + 12, "扫描点")
+        if self._window_s is None:
+            seq_values = [
+                seq
+                for series in visible.values()
+                for seq, _, _ in series
+            ]
+            tick_min, tick_max = min(seq_values), max(seq_values)
+            for index in range(6):
+                value = int(
+                    tick_min + (tick_max - tick_min) * index / 5
+                )
+                x = plot_left + (plot_right - plot_left) * index / 5
+                painter.drawText(
+                    int(x) - 24,
+                    plot_bottom + 10,
+                    48,
+                    18,
+                    Qt.AlignmentFlag.AlignCenter,
+                    str(value),
+                )
+            painter.drawText(plot_left - 30, plot_bottom + 26, "样本序号")
+        else:
+            for index in range(6):
+                seconds = self._window_s * (index / 5 - 1)
+                x = plot_left + (plot_right - plot_left) * index / 5
+                painter.drawText(
+                    int(x) - 24,
+                    plot_bottom + 10,
+                    48,
+                    18,
+                    Qt.AlignmentFlag.AlignCenter,
+                    f"{seconds:.0f}s",
+                )
+            painter.drawText(plot_left - 30, plot_bottom + 26, "时间")
+        painter.drawText(
+            plot_left,
+            self.height() - 6,
+            f"{self._sample_count} 样本 · {len(visible)} 通道",
+        )
 
         channels = sorted(visible)
         legend_x = plot_left
