@@ -32,7 +32,7 @@ Windows 桌面程序，用于 HP / Agilent / Keysight 34401A 台式万用表的�
 
 ## GPIB
 
-- 左侧“接口”选择 `GPIB`，地址填写 `gpib0,1` 或 `GPIB0::1::INSTR`。
+- 打开“通信 → 连接设置…”，接口选择 `GPIB`，地址填写 `gpib0,1` 或 `GPIB0::1::INSTR`。
 - 34401A 出厂 GPIB 地址通常是 1。
 - GPIB 通过 Keysight SICL 小桥接程序 `tools/sicl_bridge.exe` 通信，串口仍走 VISA。
 - 首次使用或重新克隆仓库后，在本机编译桥接程序：

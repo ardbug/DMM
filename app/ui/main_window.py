@@ -232,7 +232,7 @@ class MainWindow(QMainWindow):
         logs_menu.addAction(serial_log_action)
 
         comm_menu = self.menuBar().addMenu("通信(&C)")
-        settings_action = QAction("串口设置…", self)
+        settings_action = QAction("连接设置…", self)
         settings_action.triggered.connect(self._open_serial_dialog)
         comm_menu.addAction(settings_action)
         self.open_action = QAction("打开连接", self)
@@ -383,21 +383,19 @@ class MainWindow(QMainWindow):
         self.controller.close_connection()
 
     def _open_serial_dialog(self) -> None:
-        if self._config.serial_settings().interface == "gpib":
-            QMessageBox.information(
-                self,
-                "串口设置",
-                "当前使用 GPIB。请先在左侧“接口”切换为串口，再修改串口参数。",
-            )
-            return
-        dialog = SerialDialog(self._config.serial_settings(), self)
+        dialog = SerialDialog(
+            self._config.serial_settings(),
+            serial_resource=self._config.serial_resource(),
+            gpib_resource=self._config.gpib_resource(),
+            parent=self,
+        )
         if not dialog.exec():
             return
         settings = dialog.settings()
         self._config.save_serial_settings(settings)
-        self.statusBar().showMessage("串口设置已保存", 3000)
+        self.statusBar().showMessage("连接设置已保存", 3000)
         if self._state in {"ready", "acquiring", "reading"}:
-            self.statusBar().showMessage("串口设置已保存，重新打开串口后生效", 5000)
+            self.statusBar().showMessage("连接设置已保存，重新打开后生效", 5000)
 
     def _on_resources(self, _resources: list[str]) -> None:
         # 目前端口由“串口设置”手动填写；保留信号避免无接收者。
