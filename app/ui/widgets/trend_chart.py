@@ -288,6 +288,14 @@ class TrendChart(QWidget):
         ]
         data_min = min((v for v, _ in valid), default=0.0)
         data_max = max((v for v, _ in valid), default=1.0)
+        # 扫描时其他通道可能和主通道量级不同，Y 轴必须把所有叠加
+        # 通道一起纳入，否则黄色/绿色曲线会落到绘图区外看不见。
+        for ring in self._overlay_rings.values():
+            for value, _ts, ovld in ring.iter_ordered():
+                if ovld or not math.isfinite(value):
+                    continue
+                data_min = min(data_min, value)
+                data_max = max(data_max, value)
         if math.isclose(data_min, data_max):
             span = abs(data_min) * 0.02 or 1.0
             data_min -= span

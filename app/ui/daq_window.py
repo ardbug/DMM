@@ -102,7 +102,6 @@ class DaqWindow(QMainWindow):
         self.readout = ReadoutPanel(center)
         self.readout.set_daq_mode(True, 1.0)
         self.readout.set_daq_channels(1)
-        self.readout.set_digits("6½")
         self.trend_tab = QWidget(center)
         trend_layout = QVBoxLayout(self.trend_tab)
         trend_layout.setContentsMargins(0, 0, 0, 0)
