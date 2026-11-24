@@ -13,9 +13,10 @@ _FORMAT = "%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-def setup_logging(debug: bool = False) -> Path:
+def setup_logging(debug: bool = False, instance: int = 1) -> Path:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = LOG_DIR / "34401a.log"
+    name = "34401a.log" if instance <= 1 else f"34401a_{instance}.log"
+    log_path = LOG_DIR / name
 
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if debug else logging.INFO)

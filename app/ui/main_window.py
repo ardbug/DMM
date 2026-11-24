@@ -61,9 +61,10 @@ log = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, instance: int = 1) -> None:
         super().__init__()
         self._config = config
+        self._instance = max(1, int(instance))
         self._state = "disconnected"
         self._single_count = 0
         self._record_after_single = False
@@ -84,7 +85,10 @@ class MainWindow(QMainWindow):
         self._floating_minimized_main = False
         self._read_active = False
 
-        self.setWindowTitle("34401A上位机")
+        title = "34401A上位机"
+        if self._instance > 1:
+            title += f" · 实例 {self._instance}"
+        self.setWindowTitle(title)
         icon_path = Path(__file__).resolve().parents[2] / "icon.png"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
@@ -173,6 +177,9 @@ class MainWindow(QMainWindow):
         location_action = QAction("更改 CSV 存储位置…", self)
         location_action.triggered.connect(self._change_csv_directory)
         file_menu.addAction(location_action)
+        new_instance_action = QAction("新开一个窗口", self)
+        new_instance_action.triggered.connect(self._open_new_instance)
+        file_menu.addAction(new_instance_action)
         file_menu.addSeparator()
         quit_action = QAction("退出", self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
@@ -889,6 +896,25 @@ class MainWindow(QMainWindow):
             self.controller.stop_acquisition()
             self.readout_panel.start_btn.setText("正在停止…")
             self.readout_panel.start_btn.setEnabled(False)
+
+    def _open_new_instance(self) -> None:
+        main_py = Path(__file__).resolve().parents[2] / "main.py"
+        ok = QProcess.startDetached(
+            sys.executable,
+            [str(main_py)],
+            str(main_py.parent),
+        )
+        if not ok:
+            QMessageBox.warning(
+                self,
+                "新开窗口失败",
+                "无法启动新实例；请手动运行启动程序。",
+            )
+            return
+        self.statusBar().showMessage(
+            "已启动新实例；每个实例使用独立配置、日志和 CSV 目录",
+            5000,
+        )
 
     def _set_scale_factor(self, percent: int) -> None:
         self._config.save_scale_factor(percent)

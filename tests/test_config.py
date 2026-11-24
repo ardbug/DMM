@@ -29,6 +29,13 @@ def test_acquisition_config_roundtrip_ignores_range(tmp_path) -> None:
     assert config.acquisition_config() == expected
 
 
+def test_instance_uses_separate_config_and_csv_directory(tmp_path) -> None:
+    config = AppConfig(tmp_path / "settings_2.ini", instance=2)
+    assert config.instance == 2
+    assert config.path.name == "settings_2.ini"
+    assert config.csv_directory().name == "实例2"
+
+
 def test_connection_interface_roundtrip(tmp_path) -> None:
     config = AppConfig(tmp_path / "settings.ini")
     config.save_serial_settings(

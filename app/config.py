@@ -20,17 +20,23 @@ from app.constants import (
 from app.domain.models import AcquisitionConfig, SerialSettings
 
 
-def default_config_path() -> Path:
+def default_config_path(instance: int = 1) -> Path:
     base = os.environ.get("APPDATA")
     root = Path(base) if base else Path.home() / "AppData" / "Roaming"
-    return root / "34401A_Upper" / "settings.ini"
+    name = "settings.ini" if instance <= 1 else f"settings_{instance}.ini"
+    return root / "34401A_Upper" / name
 
 
 class AppConfig:
     """薄封装，避免各界面直接拼 QSettings 的键。"""
 
-    def __init__(self, path: Path | None = None) -> None:
-        self.path = path or default_config_path()
+    def __init__(
+        self,
+        path: Path | None = None,
+        instance: int = 1,
+    ) -> None:
+        self.instance = max(1, int(instance))
+        self.path = path or default_config_path(self.instance)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._settings = QSettings(str(self.path), QSettings.Format.IniFormat)
 
@@ -143,7 +149,8 @@ class AppConfig:
         raw = str(self._settings.value("csv/directory", "") or "").strip()
         if raw:
             return Path(raw)
-        return Path.home() / "Documents" / "34401A数据"
+        base = Path.home() / "Documents" / "34401A数据"
+        return base if self.instance <= 1 else base / f"实例{self.instance}"
 
     def save_csv_directory(self, path: str) -> None:
         self._settings.setValue("csv/directory", str(path))
