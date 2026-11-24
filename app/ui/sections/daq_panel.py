@@ -6,10 +6,12 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
+    QCheckBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -117,6 +119,9 @@ class DaqPanel(QFrame):
         self.channel = QSpinBox(self)
         self.channel.setRange(101, 122)
         self.channel.setValue(101)
+        self.scan_check = QCheckBox("多通道扫描", self)
+        self.scan_list = QLineEdit("101:110", self)
+        self.scan_list.setPlaceholderText("例如 101:110,121")
         self.function = ThemedComboBox(self)
         for label, value in _FUNCTIONS:
             self.function.addItem(label, value)
@@ -136,6 +141,9 @@ class DaqPanel(QFrame):
         self.rate.setValue(1.0)
         self.rate.setSuffix(" Hz")
         form.addRow("通道", self.channel)
+        form.addRow("", self.scan_check)
+        form.addRow("扫描列表", self.scan_list)
+        self._scan_label = form.labelForField(self.scan_list)
         form.addRow("功能", self.function)
         form.addRow("传感器", self.temp_sensor)
         self._temp_sensor_label = form.labelForField(self.temp_sensor)
@@ -177,14 +185,18 @@ class DaqPanel(QFrame):
         self.interface.currentIndexChanged.connect(self._sync_interface)
         self.function.currentIndexChanged.connect(self._sync_function)
         self.channel.valueChanged.connect(self._sync_channel)
+        self.scan_check.toggled.connect(self._sync_scan)
+        self.scan_list.textChanged.connect(self.config_changed)
         self.function.currentIndexChanged.connect(self.config_changed)
         self.temp_sensor.currentIndexChanged.connect(self.config_changed)
         self.temp_unit.currentIndexChanged.connect(self.config_changed)
         self.nplc.currentIndexChanged.connect(self.config_changed)
         self.rate.valueChanged.connect(self.config_changed)
         self.channel.valueChanged.connect(self.config_changed)
+        self.scan_check.toggled.connect(self.config_changed)
         self._sync_interface()
         self._sync_function()
+        self._sync_scan()
         self._sync_channel()
         self.set_state("disconnected")
 
@@ -204,7 +216,16 @@ class DaqPanel(QFrame):
         self._temp_sensor_label.setVisible(temp)
         self._temp_unit_label.setVisible(temp)
 
+    def _sync_scan(self) -> None:
+        scan = self.scan_check.isChecked()
+        self.channel.setEnabled(not scan)
+        self.scan_list.setVisible(scan)
+        if self._scan_label is not None:
+            self._scan_label.setVisible(scan)
+
     def _sync_channel(self) -> None:
+        if self.scan_check.isChecked():
+            return
         current_only = self.channel.value() >= 121
         for index in range(self.function.count()):
             value = self.function.itemData(index)
@@ -264,6 +285,8 @@ class DaqPanel(QFrame):
             temperature=str(self.temp_sensor.currentData()),
             temp_unit=str(self.temp_unit.currentData()),
             rate=float(self.rate.value()),
+            scan=self.scan_check.isChecked(),
+            scan_list=self.scan_list.text().strip(),
         )
 
     def _emit_start(self) -> None:

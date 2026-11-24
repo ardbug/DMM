@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 
 from app.constants import OVLD_THRESHOLD
@@ -47,6 +48,54 @@ class DaqConfig:
     temperature: str = "TC:K"
     temp_unit: str = "C"
     rate: float = 1.0
+    scan: bool = False
+    scan_list: str = ""
+
+
+def parse_channels(spec: str) -> list[int]:
+    channels: list[int] = []
+    for part in spec.replace("，", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            first, last = part.split(":", 1)
+            try:
+                start, end = int(first), int(last)
+            except ValueError as exc:
+                raise ValueError(f"非法通道范围：{part}") from exc
+            if start > end:
+                start, end = end, start
+            values = range(start, end + 1)
+        else:
+            try:
+                values = (int(part),)
+            except ValueError as exc:
+                raise ValueError(f"非法通道：{part}") from exc
+        for channel in values:
+            if not 101 <= channel <= 122:
+                raise ValueError(f"通道超出范围：{channel}")
+            if channel not in channels:
+                channels.append(channel)
+    if not channels:
+        raise ValueError("扫描通道为空")
+    return channels
+
+
+def _format_channels(channels: list[int]) -> str:
+    if not channels:
+        return ""
+    values = sorted(channels)
+    parts: list[str] = []
+    start = prev = values[0]
+    for value in values[1:]:
+        if value == prev + 1:
+            prev = value
+            continue
+        parts.append(str(start) if start == prev else f"{start}:{prev}")
+        start = prev = value
+    parts.append(str(start) if start == prev else f"{start}:{prev}")
+    return ",".join(parts)
 
 
 class Daq34970A:
@@ -86,6 +135,9 @@ class Daq34970A:
         self.local_only = True
 
     def configure(self, config: DaqConfig) -> None:
+        if config.scan:
+            self._configure_scan(config)
+            return
         channel = int(config.channel)
         if config.function == "TEMP":
             conf = _TEMP_CONF.get(config.temperature, "CONF:TEMP TC,K")
@@ -118,6 +170,79 @@ class Daq34970A:
                 range_text="AUTO",
                 terminal="",
             )
+
+    def _configure_scan(self, config: DaqConfig) -> None:
+        channels = parse_channels(config.scan_list)
+        current = [ch for ch in channels if ch >= 121]
+        if current and len(current) != len(channels):
+            raise ValueError("扫描列表不能混用电流通道 121/122 和复用通道")
+        if current and config.function not in {"CURR:DC", "CURR:AC"}:
+            raise ValueError("通道 121/122 只能扫描电流")
+        channel_spec = _format_channels(channels)
+        if config.function == "TEMP":
+            conf = _TEMP_CONF.get(config.temperature, "CONF:TEMP TC,K")
+            self._io.write_line(f"{conf},(@{channel_spec})")
+            if config.temperature.endswith(":1000"):
+                if config.temperature.startswith("RTD:4W"):
+                    self._io.write_line(
+                        f"SENS:TEMP:TRAN:FRTD:RES 1000,(@{channel_spec})"
+                    )
+                else:
+                    self._io.write_line(
+                        f"SENS:TEMP:TRAN:RTD:RES 1000,(@{channel_spec})"
+                    )
+            self._io.write_line(f"UNIT:TEMP {config.temp_unit},(@{channel_spec})")
+            self._io.write_line(
+                f"SENS:TEMP:NPLC {config.nplc:g},(@{channel_spec})"
+            )
+            info = _FUNCTIONS["TEMP"]
+        else:
+            self._io.write_line(f"CONF:{config.function} (@{channel_spec})")
+            self._io.write_line(
+                f"SENS:{config.function}:NPLC {config.nplc:g},(@{channel_spec})"
+            )
+            info = _FUNCTIONS.get(config.function, _FUNCTIONS["VOLT:DC"])
+        self._io.write_line(f"ROUT:SCAN (@{channel_spec})")
+        self._scan_spec = channel_spec
+        self.status = InstrumentStatus(
+            function=info,
+            nplc=f"{config.nplc:g}",
+            range_text="SCAN",
+            terminal="",
+        )
+
+    def read_scan(self, timeout_ms: int = 15000) -> list[tuple[int, Reading]]:
+        channels = parse_channels(
+            self._scan_spec if hasattr(self, "_scan_spec") else ""
+        )
+        raw = self._io.query_line("READ?", timeout_ms)
+        tokens = [item.strip() for item in raw.split(",") if item.strip()]
+        if len(tokens) != len(channels):
+            raise RuntimeError(
+                f"34970A 扫描条数不符：期望 {len(channels)}，实际 {len(tokens)}"
+            )
+        info = self.status.function if self.status else _FUNCTIONS["VOLT:DC"]
+        stamp = time.time_ns()
+        result: list[tuple[int, Reading]] = []
+        for channel, token in zip(channels, tokens, strict=True):
+            try:
+                value = float(token)
+            except ValueError as exc:
+                raise RuntimeError(f"34970A 扫描读数无法解析：{token!r}") from exc
+            result.append(
+                (
+                    channel,
+                    Reading(
+                        value=value,
+                        unit=info.unit,
+                        function_label=info.label,
+                        ovld=abs(value) >= OVLD_THRESHOLD,
+                        raw=token,
+                        timestamp_ns=stamp,
+                    ),
+                )
+            )
+        return result
 
     def read(self, timeout_ms: int = 5000) -> Reading:
         raw = self._io.query_line("READ?", timeout_ms)

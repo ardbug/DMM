@@ -1,11 +1,16 @@
 from app.domain.models import SerialSettings
-from app.instrument.daq34970a import Daq34970A, DaqConfig
+from app.instrument.daq34970a import (
+    Daq34970A,
+    DaqConfig,
+    parse_channels,
+)
 
 
 class FakeIo:
     def __init__(self) -> None:
         self.writes: list[str] = []
         self.is_open = False
+        self.scan_response = "+1.25000000E+00"
 
     def open(self, settings: SerialSettings) -> None:
         self.is_open = True
@@ -17,7 +22,7 @@ class FakeIo:
         if command == "*IDN?":  # noqa: S105
             return "KEYSIGHT,34970A,0,1.0"
         if command == "READ?":
-            return "+1.25000000E+00"
+            return self.scan_response
         return ""
 
     def close(self) -> None:
@@ -66,6 +71,30 @@ def test_rtd_1000_type_sets_nominal_resistance() -> None:
         )
     )
     assert "SENS:TEMP:TRAN:FRTD:RES 1000,(@104)" in io.writes
+
+
+def test_parse_scan_channels() -> None:
+    assert parse_channels("101:103,110") == [101, 102, 103, 110]
+    assert parse_channels("110:108，121") == [108, 109, 110, 121]
+
+
+def test_scan_configuration_and_read() -> None:
+    io = FakeIo()
+    io.scan_response = "+1.0,+2.0,+3.0"
+    device = Daq34970A(io)
+    device.open(SerialSettings(resource="gpib0,9", interface="gpib"))
+    config = DaqConfig(
+        scan=True,
+        scan_list="101:103",
+        function="VOLT:DC",
+        nplc=1,
+    )
+    device.configure(config)
+    assert "CONF:VOLT:DC (@101:103)" in io.writes
+    assert "ROUT:SCAN (@101:103)" in io.writes
+    samples = device.read_scan()
+    assert [channel for channel, _ in samples] == [101, 102, 103]
+    assert [reading.value for _, reading in samples] == [1.0, 2.0, 3.0]
 
 
 def test_current_channel_configuration() -> None:

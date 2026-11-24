@@ -15,6 +15,7 @@ from app.transport.visa_io import VisaIO
 
 class DaqWorker(QThread):
     reading_received = Signal(object)
+    scan_received = Signal(object)
     state_changed = Signal(str, str)
     error_occurred = Signal(str, str)
     status_updated = Signal(object)
@@ -112,6 +113,12 @@ class DaqWorker(QThread):
         assert self._device is not None
         self.read_activity.emit(True)
         try:
+            if self._config is not None and self._config.scan:
+                samples = self._device.read_scan(15000)
+                self.scan_received.emit(samples)
+                if samples:
+                    self.reading_received.emit(samples[-1][1])
+                return
             reading = self._device.read(5000)
             reading = reading.__class__(
                 value=reading.value,

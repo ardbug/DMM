@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QTimer, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QHeaderView,
     QMainWindow,
     QMessageBox,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -46,6 +52,7 @@ class DaqWindow(QMainWindow):
         self._csv_path: Path | None = None
         self._last_config: DaqConfig | None = None
         self._batch_id = 0
+        self._scan_rows: dict[int, int] = {}
 
         title = "34970A 上位机"
         if instance > 1:
@@ -69,8 +76,22 @@ class DaqWindow(QMainWindow):
         self.readout = ReadoutPanel(right)
         self.readout.set_daq_mode(True, 1.0)
         self.trend = TrendPanel(self._ring, right)
+        self.output_tabs = QTabWidget(right)
+        self.output_tabs.addTab(self.trend, "趋势")
+        self.scan_table = QTableWidget(0, 5, self.output_tabs)
+        self.scan_table.setHorizontalHeaderLabels(
+            ["通道", "功能", "读数", "单位", "时间"]
+        )
+        self.scan_table.verticalHeader().setVisible(False)
+        self.scan_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.scan_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        self.output_tabs.addTab(self.scan_table, "扫描表")
         right.addWidget(self.readout)
-        right.addWidget(self.trend)
+        right.addWidget(self.output_tabs)
         right.setStretchFactor(0, 35)
         right.setStretchFactor(1, 65)
         splitter.addWidget(self.panel)
@@ -113,6 +134,7 @@ class DaqWindow(QMainWindow):
         self.panel.csv_toggle_requested.connect(self._toggle_csv)
         self.panel.open_csv_folder_requested.connect(self._open_csv_folder)
         self._worker.reading_received.connect(self._on_reading)
+        self._worker.scan_received.connect(self._on_scan)
         self._worker.state_changed.connect(self._on_state)
         self._worker.status_updated.connect(self.readout.set_status)
         self._worker.error_occurred.connect(self._on_error)
@@ -171,21 +193,69 @@ class DaqWindow(QMainWindow):
 
     def _on_reading(self, reading: Reading) -> None:
         self.readout.set_reading(reading)
+        if self._last_config is not None and self._last_config.scan:
+            return
         self.trend.set_function(reading.function_label)
         self.trend.set_unit(reading.unit)
         self.trend.set_measurement_state("acquiring")
+        self._record_batch([reading])
+
+    def _on_scan(self, samples) -> None:
+        if not samples:
+            return
+        for channel, reading in samples:
+            row = self._scan_rows.get(channel)
+            if row is None:
+                row = self.scan_table.rowCount()
+                self.scan_table.insertRow(row)
+                self._scan_rows[channel] = row
+                self.scan_table.setItem(row, 0, QTableWidgetItem(str(channel)))
+            self.scan_table.setItem(
+                row, 1, QTableWidgetItem(reading.function_label)
+            )
+            self.scan_table.setItem(
+                row, 2, QTableWidgetItem(f"{reading.value:.8g}")
+            )
+            self.scan_table.setItem(row, 3, QTableWidgetItem(reading.unit))
+            self.scan_table.setItem(
+                row,
+                4,
+                QTableWidgetItem(
+                    datetime.fromtimestamp(
+                        reading.timestamp_ns / 1_000_000_000
+                    ).strftime("%H:%M:%S")
+                ),
+            )
+        self.scan_table.scrollToBottom()
+        last = samples[-1][1]
+        self.readout.set_reading(last)
+        self.output_tabs.setCurrentWidget(self.scan_table)
+        self._record_batch(
+            [
+                replace(
+                    reading,
+                    function_label=f"CH{channel} {reading.function_label}",
+                )
+                for channel, reading in samples
+            ]
+        )
+
+    def _record_batch(self, readings: list[Reading]) -> None:
+        if not readings:
+            return
+        first = readings[0]
         config = AcquisitionConfig(
-            function=reading.function_label,
+            function=first.function_label,
+            nplc=float(self._last_config.nplc) if self._last_config else 1.0,
             rate=float(self._last_config.rate) if self._last_config else 1.0,
         )
-        start = reading.timestamp_ns
         batch = Batch(
-            readings=(reading,),
+            readings=tuple(readings),
             config=config,
             config_version=1,
             batch_id=self._batch_id,
-            start_ns=start,
-            end_ns=start,
+            start_ns=first.timestamp_ns,
+            end_ns=readings[-1].timestamp_ns,
         )
         self._batch_id += 1
         self._ring.append_batch(batch)
@@ -217,12 +287,15 @@ class DaqWindow(QMainWindow):
             self._csv_path = None
             self.panel.set_csv_state(False)
             return
-        label = (
-            f"CH{self._last_config.channel}_"
-            f"{self._last_config.function.replace(':', '_')}"
-            if self._last_config
-            else "34970A"
-        )
+        if self._last_config and self._last_config.scan:
+            label = f"SCAN_{self._last_config.function.replace(':', '_')}"
+        elif self._last_config:
+            label = (
+                f"CH{self._last_config.channel}_"
+                f"{self._last_config.function.replace(':', '_')}"
+            )
+        else:
+            label = "34970A"
         path = make_csv_path(label, self._config.csv_directory())
         writer = CsvWriter(path, self)
         writer.opened.connect(
