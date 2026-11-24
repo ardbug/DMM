@@ -49,6 +49,9 @@ class AppConfig:
     def gpib_resource(self) -> str:
         return str(self._settings.value("connection/gpib_resource", "gpib0,1"))
 
+    def has_connection_settings(self) -> bool:
+        return self._settings.contains("connection/interface")
+
     def serial_settings(self) -> SerialSettings:
         s = self._settings
         interface = str(s.value("connection/interface", "serial"))

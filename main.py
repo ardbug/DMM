@@ -47,6 +47,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=0,
         help="实例编号；0 自动选择空闲实例，2 及以上使用独立配置和日志",
     )
+    parser.add_argument(
+        "--model",
+        choices=("34401A", "34970A"),
+        default="34401A",
+        help="设备型号",
+    )
     return parser.parse_args(argv)
 
 
@@ -88,7 +94,12 @@ def main(argv: list[str] | None = None) -> int:
     # 系统主题切换时重刷 QSS/调色板。
     app.styleHints().colorSchemeChanged.connect(lambda _scheme: apply_theme(app))
 
-    window = MainWindow(config, instance=instance)
+    if args.model == "34970A":
+        from app.ui.daq_window import DaqWindow
+
+        window = DaqWindow(config, instance=instance)
+    else:
+        window = MainWindow(config, instance=instance)
     window.show()
     return app.exec()
 

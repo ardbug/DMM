@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QSplitter,
@@ -177,9 +178,18 @@ class MainWindow(QMainWindow):
         location_action = QAction("更改 CSV 存储位置…", self)
         location_action.triggered.connect(self._change_csv_directory)
         file_menu.addAction(location_action)
-        new_instance_action = QAction("新开一个窗口", self)
-        new_instance_action.triggered.connect(self._open_new_instance)
-        file_menu.addAction(new_instance_action)
+        new_menu = QMenu("新开一个窗口", self)
+        new_34401 = QAction("34401A 窗口", self)
+        new_34401.triggered.connect(
+            lambda: self._open_new_instance("34401A")
+        )
+        new_34970 = QAction("34970A 窗口", self)
+        new_34970.triggered.connect(
+            lambda: self._open_new_instance("34970A")
+        )
+        new_menu.addAction(new_34401)
+        new_menu.addAction(new_34970)
+        file_menu.addMenu(new_menu)
         file_menu.addSeparator()
         quit_action = QAction("退出", self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
@@ -897,11 +907,11 @@ class MainWindow(QMainWindow):
             self.readout_panel.start_btn.setText("正在停止…")
             self.readout_panel.start_btn.setEnabled(False)
 
-    def _open_new_instance(self) -> None:
+    def _open_new_instance(self, model: str = "34401A") -> None:
         main_py = Path(__file__).resolve().parents[2] / "main.py"
         ok = QProcess.startDetached(
             sys.executable,
-            [str(main_py)],
+            [str(main_py), "--model", model],
             str(main_py.parent),
         )
         if not ok:
@@ -912,7 +922,7 @@ class MainWindow(QMainWindow):
             )
             return
         self.statusBar().showMessage(
-            "已启动新实例；每个实例使用独立配置、日志和 CSV 目录",
+            f"已启动 {model} 新实例；每个实例使用独立配置、日志和 CSV 目录",
             5000,
         )
 
