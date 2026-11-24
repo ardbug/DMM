@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import csv
 import sys
 import time
 from dataclasses import replace
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSplitter,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -39,6 +41,7 @@ from PySide6.QtWidgets import (
 from app.ui.widgets.common import ErrorBanner
 
 from app.acquisition.daq_worker import DaqWorker
+from app.acquisition.ring_buffer import RingBuffer
 
 from app.config import AppConfig
 from app.domain.models import (
@@ -47,10 +50,12 @@ from app.domain.models import (
     Reading,
     SerialSettings,
 )
+from app.domain.statistics import StatsAccumulator
 from app.instrument.daq34970a import DaqConfig, parse_channels
 from app.storage.csv_writer import CsvQueueFull, CsvWriter, make_csv_path
 from app.ui.sections.daq_panel import DaqConnectionPanel, DaqParamsPanel
 from app.ui.sections.readout_panel import ReadoutPanel
+from app.ui.sections.trend_panel import TrendPanel
 from app.ui.widgets.multi_trend import MultiChannelTrend
 
 
@@ -60,6 +65,8 @@ class DaqWindow(QMainWindow):
         self._config = config
         self._instance = instance
         self._state = "disconnected"
+        self._single_ring = RingBuffer()
+        self._single_stats = StatsAccumulator()
 
         self._worker = DaqWorker()
         self._csv: CsvWriter | None = None
@@ -94,16 +101,25 @@ class DaqWindow(QMainWindow):
         self.readout = ReadoutPanel(center)
         self.readout.set_daq_mode(True, 1.0)
         self.readout.set_daq_channels(1)
-        self.trend = MultiChannelTrend(center)
         self.trend_tab = QWidget(center)
         trend_layout = QVBoxLayout(self.trend_tab)
         trend_layout.setContentsMargins(0, 0, 0, 0)
-        trend_layout.setSpacing(4)
-        trend_title = QLabel("实时趋势", self.trend_tab)
+        trend_layout.setSpacing(0)
+        self.trend_stack = QStackedWidget(self.trend_tab)
+        trend_layout.addWidget(self.trend_stack)
+        self.single_trend = TrendPanel(self._single_ring, self.trend_stack)
+        self.trend_stack.addWidget(self.single_trend)
+        self.multi_page = QWidget(self.trend_stack)
+        multi_layout = QVBoxLayout(self.multi_page)
+        multi_layout.setContentsMargins(0, 0, 0, 0)
+        multi_layout.setSpacing(4)
+        self.trend_stack.addWidget(self.multi_page)
+        self.trend = MultiChannelTrend(self.multi_page)
+        trend_title = QLabel("实时趋势", self.multi_page)
         trend_title.setObjectName("SectionTitle")
-        trend_layout.addWidget(trend_title)
+        multi_layout.addWidget(trend_title)
         trend_controls = QHBoxLayout()
-        self.window_combo = QComboBox(self.trend_tab)
+        self.window_combo = QComboBox(self.multi_page)
         for label, value in (
             ("PX 模式", "px"),
             ("5 s", 5.0),
@@ -118,14 +134,14 @@ class DaqWindow(QMainWindow):
                 self.window_combo.currentData()
             )
         )
-        self.ovld_check = QCheckBox("OVLD 入图", self.trend_tab)
+        self.ovld_check = QCheckBox("OVLD 入图", self.multi_page)
         self.ovld_check.toggled.connect(self.trend.set_include_ovld)
-        self.pause_btn = QPushButton("暂停", self.trend_tab)
+        self.pause_btn = QPushButton("暂停", self.multi_page)
         self.pause_btn.setCheckable(True)
         self.pause_btn.toggled.connect(self._toggle_pause)
-        self.clear_btn = QPushButton("清空", self.trend_tab)
+        self.clear_btn = QPushButton("清空", self.multi_page)
         self.clear_btn.clicked.connect(self.trend.clear)
-        self.save_trend_btn = QPushButton("另存为", self.trend_tab)
+        self.save_trend_btn = QPushButton("另存为", self.multi_page)
         self.save_trend_btn.clicked.connect(self._save_trend)
         for widget in (
             self.window_combo,
@@ -136,10 +152,10 @@ class DaqWindow(QMainWindow):
         ):
             trend_controls.addWidget(widget)
         trend_controls.addStretch(1)
-        trend_layout.addLayout(trend_controls)
-        stats_title = QLabel("会话统计", self.trend_tab)
+        multi_layout.addLayout(trend_controls)
+        stats_title = QLabel("会话统计", self.multi_page)
         stats_title.setObjectName("Muted")
-        trend_layout.addWidget(stats_title)
+        multi_layout.addWidget(stats_title)
         stats_grid = QGridLayout()
         stats_grid.setHorizontalSpacing(10)
         stats_grid.setVerticalSpacing(2)
@@ -156,15 +172,18 @@ class DaqWindow(QMainWindow):
                 ("duration_s", "采样时间"),
             )
         ):
-            label = QLabel(f"{caption}：-", self.trend_tab)
+            label = QLabel(f"{caption}：-", self.multi_page)
             label.setObjectName("Muted")
             label.setStyleSheet("font-size: 11px;")
             label.setMinimumWidth(0)
             stats_grid.addWidget(label, index // 4, index % 4)
             self.trend_stats[key] = label
-        trend_layout.addLayout(stats_grid)
-        trend_layout.addWidget(self.trend, 1)
+        multi_layout.addLayout(stats_grid)
+        multi_layout.addWidget(self.trend, 1)
         self.trend.stats_changed.connect(self._update_trend_stats)
+        self.single_trend.clear_requested.connect(self._clear_single_trend)
+        self.single_trend.save_requested.connect(self._save_single_trend)
+        self.single_trend.record_requested.connect(self._record_single_trend)
         self.output_tabs = QTabWidget(center)
         self.output_tabs.addTab(self.trend_tab, "趋势")
         self.scan_table = QTableWidget(0, 5, self.output_tabs)
@@ -371,8 +390,54 @@ class DaqWindow(QMainWindow):
         self.readout.set_count(0)
         self.readout.set_rate(None)
         self.trend.clear()
+        self._single_ring.clear()
+        self._single_stats.reset()
+        self.single_trend.clear_view()
+        self.single_trend.set_stats(self._single_stats.snapshot())
+        self.single_trend.set_measurement_state("disconnected")
         self.scan_table.setRowCount(0)
         self._scan_rows.clear()
+        self._select_trend_page(config)
+
+    def _select_trend_page(self, config: DaqConfig) -> None:
+        self.trend_stack.setCurrentWidget(
+            self.multi_page if config.scan else self.single_trend
+        )
+
+    def _clear_single_trend(self) -> None:
+        self._single_ring.clear()
+        self._single_stats.reset()
+        self.single_trend.clear_view()
+        self.single_trend.set_stats(self._single_stats.snapshot())
+        self.readout.set_count(0)
+        self._reading_count = 0
+
+    def _save_single_trend(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "另存趋势数据",
+            str(self._config.csv_directory() / "34970A_single_trend.csv"),
+            "CSV 文件 (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", newline="", encoding="utf-8-sig") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["timestamp_ns", "value", "ovld"])
+                for value, timestamp_ns, ovld in self._single_ring.iter_ordered():
+                    writer.writerow([timestamp_ns, f"{value:.15g}", int(ovld)])
+        except Exception as exc:
+            self._on_error("保存趋势失败", str(exc))
+
+    def _record_single_trend(self) -> None:
+        latest = self.readout._last_reading
+        if latest is None:
+            return
+        self.single_trend.add_record(
+            self.readout.display_text_for(latest),
+            f"NPLC {self._last_config.nplc:g}" if self._last_config else "",
+        )
 
     def _update_rate(self) -> None:
         if not self._rate_started_ns:
@@ -389,13 +454,14 @@ class DaqWindow(QMainWindow):
             self._worker.submit("stop")
         else:
             self._reset_session(config)
-            self.output_tabs.setCurrentWidget(self.trend)
+            self.output_tabs.setCurrentWidget(self.trend_tab)
             self._worker.submit("start", config)
 
     def _on_config_changed(self) -> None:
         config = self.params.config()
         self.readout.set_daq_mode(True, config.nplc)
         self.readout.set_daq_channels(self.params.selected_channel_count())
+        self._select_trend_page(config)
         channels = self._config_channels(config)
         if channels and channels != self._active_channels:
             # 切换通道或扫描模式时，旧曲线不能继续留在图上。
@@ -405,6 +471,10 @@ class DaqWindow(QMainWindow):
             self.readout.set_count(0)
             self.readout.set_rate(None)
             self.trend.clear()
+            self._single_ring.clear()
+            self._single_stats.reset()
+            self.single_trend.clear_view()
+            self.single_trend.set_stats(self._single_stats.snapshot())
             self.scan_table.setRowCount(0)
             self._scan_rows.clear()
         if self._state == "acquiring":
@@ -468,8 +538,6 @@ class DaqWindow(QMainWindow):
         self.readout.set_reading(reading)
         if self._last_config is not None and self._last_config.scan:
             return
-        channel = self._last_config.channel if self._last_config else 1
-        self.trend.append_samples([(channel, reading)])
         self._reading_count += 1
         self.readout.set_count(self._reading_count)
         self._update_rate()
@@ -536,6 +604,14 @@ class DaqWindow(QMainWindow):
             end_ns=readings[-1].timestamp_ns,
         )
         self._batch_id += 1
+        if self._last_config is None or not self._last_config.scan:
+            self._single_ring.append_batch(batch)
+            self._single_stats.add_batch(batch.readings)
+            self.single_trend.set_function(first.function_label)
+            self.single_trend.set_unit(first.unit)
+            self.single_trend.notify_data(batch)
+            self.single_trend.set_stats(self._single_stats.snapshot())
+            self.single_trend.set_measurement_state("acquiring")
         if self._csv is not None:
             try:
                 self._csv.enqueue(batch)
@@ -547,6 +623,7 @@ class DaqWindow(QMainWindow):
         self._state = state
         self.panel.set_state(state, detail)
         self.params.set_state(state)
+        self.single_trend.set_measurement_state(state)
         self.readout.set_state(state, detail)
 
         self.statusBar().showMessage(detail)
