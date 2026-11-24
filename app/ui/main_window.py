@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QSplitter,
@@ -178,23 +177,23 @@ class MainWindow(QMainWindow):
         location_action = QAction("更改 CSV 存储位置…", self)
         location_action.triggered.connect(self._change_csv_directory)
         file_menu.addAction(location_action)
-        new_menu = QMenu("新开一个窗口", self)
-        new_34401 = QAction("34401A 窗口", self)
-        new_34401.triggered.connect(
-            lambda: self._open_new_instance("34401A")
-        )
-        new_34970 = QAction("34970A 窗口", self)
-        new_34970.triggered.connect(
-            lambda: self._open_new_instance("34970A")
-        )
-        new_menu.addAction(new_34401)
-        new_menu.addAction(new_34970)
-        file_menu.addMenu(new_menu)
         file_menu.addSeparator()
         quit_action = QAction("退出", self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+
+        window_menu = self.menuBar().addMenu("窗口(&W)")
+        new_34401 = QAction("新开 34401A 窗口", self)
+        new_34401.triggered.connect(
+            lambda: self._open_new_instance("34401A")
+        )
+        new_34970 = QAction("新开 34970A 窗口", self)
+        new_34970.triggered.connect(
+            lambda: self._open_new_instance("34970A")
+        )
+        window_menu.addAction(new_34401)
+        window_menu.addAction(new_34970)
 
         view_menu = self.menuBar().addMenu("视图(&V)")
         self.left_action = QAction("显示左侧工具栏", self)

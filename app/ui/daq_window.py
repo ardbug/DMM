@@ -10,7 +10,6 @@ from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QSplitter,
     QVBoxLayout,
@@ -80,22 +79,22 @@ class DaqWindow(QMainWindow):
         self._splitter = splitter
 
         file_menu = self.menuBar().addMenu("文件(&F)")
-        new_menu = QMenu("新开一个窗口", self)
-        action_34401 = QAction("34401A 窗口", self)
-        action_34401.triggered.connect(
-            lambda: self._open_new_instance("34401A")
-        )
-        action_34970 = QAction("34970A 窗口", self)
-        action_34970.triggered.connect(
-            lambda: self._open_new_instance("34970A")
-        )
-        new_menu.addAction(action_34401)
-        new_menu.addAction(action_34970)
-        file_menu.addMenu(new_menu)
         quit_action = QAction("退出", self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+
+        window_menu = self.menuBar().addMenu("窗口(&W)")
+        action_34401 = QAction("新开 34401A 窗口", self)
+        action_34401.triggered.connect(
+            lambda: self._open_new_instance("34401A")
+        )
+        action_34970 = QAction("新开 34970A 窗口", self)
+        action_34970.triggered.connect(
+            lambda: self._open_new_instance("34970A")
+        )
+        window_menu.addAction(action_34401)
+        window_menu.addAction(action_34970)
 
         self.panel.open_requested.connect(self._open)
         self.panel.close_requested.connect(self._close)
