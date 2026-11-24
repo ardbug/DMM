@@ -38,7 +38,11 @@ class DaqWorker(QThread):
                 self._read_once()
                 period = 1.0 / max(
                     0.1,
-                    float(self._config.rate) if self._config else 1.0,
+                    float(
+                        self._config.scan_rate
+                        if self._config and self._config.scan
+                        else (self._config.rate if self._config else 1.0)
+                    ),
                 )
                 deadline = time.monotonic() + max(0.05, period)
                 while time.monotonic() < deadline and self._acquiring:

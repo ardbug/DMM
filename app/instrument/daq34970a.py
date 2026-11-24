@@ -50,6 +50,7 @@ class DaqConfig:
     rate: float = 1.0
     scan: bool = False
     scan_list: str = ""
+    scan_rate: float = 1.0
 
 
 def parse_channels(spec: str) -> list[int]:
@@ -217,6 +218,14 @@ class Daq34970A:
         )
         raw = self._io.query_line("READ?", timeout_ms)
         tokens = [item.strip() for item in raw.split(",") if item.strip()]
+        # 某些固件把一次扫描按多行返回；继续读到通道数足够为止。
+        while len(tokens) < len(channels):
+            more = self._io.read_line(timeout_ms)
+            if not more:
+                break
+            tokens.extend(
+                item.strip() for item in more.split(",") if item.strip()
+            )
         if len(tokens) != len(channels):
             raise RuntimeError(
                 f"34970A 扫描条数不符：期望 {len(channels)}，实际 {len(tokens)}"

@@ -35,7 +35,7 @@ from app.domain.models import (
 )
 from app.instrument.daq34970a import DaqConfig
 from app.storage.csv_writer import CsvQueueFull, CsvWriter, make_csv_path
-from app.ui.sections.daq_panel import DaqPanel
+from app.ui.sections.daq_panel import DaqConnectionPanel, DaqParamsPanel
 from app.ui.sections.readout_panel import ReadoutPanel
 from app.ui.sections.trend_panel import TrendPanel
 
@@ -71,12 +71,13 @@ class DaqWindow(QMainWindow):
         outer.addWidget(self.error_banner)
         splitter = QSplitter(Qt.Orientation.Horizontal, central)
         outer.addWidget(splitter, 1)
-        self.panel = DaqPanel(config, splitter)
-        right = QSplitter(Qt.Orientation.Vertical, splitter)
-        self.readout = ReadoutPanel(right)
+        self.panel = DaqConnectionPanel(config, splitter)
+        self.params = DaqParamsPanel(splitter)
+        center = QSplitter(Qt.Orientation.Vertical, splitter)
+        self.readout = ReadoutPanel(center)
         self.readout.set_daq_mode(True, 1.0)
-        self.trend = TrendPanel(self._ring, right)
-        self.output_tabs = QTabWidget(right)
+        self.trend = TrendPanel(self._ring, center)
+        self.output_tabs = QTabWidget(center)
         self.output_tabs.addTab(self.trend, "趋势")
         self.scan_table = QTableWidget(0, 5, self.output_tabs)
         self.scan_table.setHorizontalHeaderLabels(
@@ -90,13 +91,14 @@ class DaqWindow(QMainWindow):
             QHeaderView.ResizeMode.Stretch
         )
         self.output_tabs.addTab(self.scan_table, "扫描表")
-        right.addWidget(self.readout)
-        right.addWidget(self.output_tabs)
-        right.setStretchFactor(0, 35)
-        right.setStretchFactor(1, 65)
+        center.addWidget(self.readout)
+        center.addWidget(self.output_tabs)
+        center.setStretchFactor(0, 35)
+        center.setStretchFactor(1, 65)
         splitter.addWidget(self.panel)
-        splitter.addWidget(right)
-        splitter.setSizes([280, 900])
+        splitter.addWidget(center)
+        splitter.addWidget(self.params)
+        splitter.setSizes([260, 650, 290])
         self.setCentralWidget(central)
         self._splitter = splitter
 
@@ -120,16 +122,16 @@ class DaqWindow(QMainWindow):
 
         self.panel.open_requested.connect(self._open)
         self.panel.close_requested.connect(self._close)
-        self.panel.start_requested.connect(self._start)
-        self.panel.stop_requested.connect(self._stop)
-        self.panel.single_requested.connect(self._single)
-        self.panel.config_changed.connect(self._on_config_changed)
+        self.params.start_requested.connect(self._start)
+        self.params.stop_requested.connect(self._stop)
+        self.params.single_requested.connect(self._single)
+        self.params.config_changed.connect(self._on_config_changed)
         self._config_timer = QTimer(self)
         self._config_timer.setSingleShot(True)
         self._config_timer.setInterval(250)
         self._config_timer.timeout.connect(self._apply_live_config)
         self.readout.start_stop_requested.connect(
-            lambda: self._start(self.panel.config())
+            lambda: self._start(self.params.config())
         )
         self.panel.csv_toggle_requested.connect(self._toggle_csv)
         self.panel.open_csv_folder_requested.connect(self._open_csv_folder)
@@ -171,7 +173,7 @@ class DaqWindow(QMainWindow):
             self._worker.submit("start", config)
 
     def _on_config_changed(self) -> None:
-        config = self.panel.config()
+        config = self.params.config()
         self.readout.set_daq_mode(True, config.nplc)
         if self._state == "acquiring":
             self._config_timer.start()
@@ -179,7 +181,7 @@ class DaqWindow(QMainWindow):
     def _apply_live_config(self) -> None:
         if self._state != "acquiring":
             return
-        config = self.panel.config()
+        config = self.params.config()
         self._last_config = config
         self.readout.set_daq_mode(True, config.nplc)
         self._worker.submit("start", config)
@@ -269,6 +271,7 @@ class DaqWindow(QMainWindow):
     def _on_state(self, state: str, detail: str) -> None:
         self._state = state
         self.panel.set_state(state, detail)
+        self.params.set_state(state)
         self.readout.set_state(state, detail)
         self.trend.set_measurement_state(state)
         self.statusBar().showMessage(detail)
