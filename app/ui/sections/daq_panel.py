@@ -68,6 +68,11 @@ class DaqConnectionPanel(QFrame):
         else:
             self._settings = SerialSettings(
                 resource="gpib0,9",
+                baud_rate=57600,
+                data_bits=8,
+                parity="none",
+                stop_bits=1,
+                flow_control="none",
                 timeout_ms=5000,
                 interface="gpib",
             )
@@ -134,11 +139,13 @@ class DaqConnectionPanel(QFrame):
         self.set_state("disconnected", "34970A 未连接")
 
     def _sync_interface(self) -> None:
-        self.resource_label.setText(
-            "GPIB 地址"
-            if self.interface.currentData() == "gpib"
-            else "串口资源"
-        )
+        gpib = self.interface.currentData() == "gpib"
+        self.resource_label.setText("GPIB 地址" if gpib else "串口资源")
+        text = self.resource.currentText().strip().upper()
+        if gpib and not text.startswith(("GPIB", "GPIB0")):
+            self.resource.setCurrentText("gpib0,9")
+        elif not gpib and text.startswith(("GPIB", "GPIB0")):
+            self.resource.setCurrentText("COM6")
 
     def _emit_open(self) -> None:
         self.open_requested.emit(self.settings())

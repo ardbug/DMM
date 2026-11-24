@@ -24,5 +24,6 @@ def test_connection_dialog_gpib_mode() -> None:
 
     dialog.interface.setCurrentIndex(dialog.interface.findData("serial"))
     assert dialog.resource.isVisibleTo(dialog)
-    assert dialog.resource.currentText() == "ASRL6::INSTR"
+    assert dialog.resource.currentData() == "COM6"
     assert dialog.settings().interface == "serial"
+    assert dialog.settings().resource == "COM6"

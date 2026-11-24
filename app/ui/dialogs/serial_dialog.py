@@ -7,12 +7,15 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from app.domain.models import SerialSettings
+from app.transport.serial_ports import list_serial_ports
 from app.ui.widgets.themed_combo import ThemedComboBox
 
 
@@ -41,17 +44,22 @@ class SerialDialog(QDialog):
         self.resource = ThemedComboBox(self)
         self.resource.setEditable(True)
         serial_resource = serial_resource or (
-            settings.resource if settings.interface == "serial" else "ASRL6::INSTR"
+            settings.resource if settings.interface == "serial" else "COM6"
         )
-        self.resource.addItem(serial_resource)
-        for number in range(1, 33):
-            item = f"ASRL{number}::INSTR"
-            if self.resource.findText(item) < 0:
-                self.resource.addItem(item)
-        self.resource.setCurrentText(serial_resource)
-        self.resource.setToolTip("COM10 对应 ASRL10::INSTR；也可直接输入")
+        self.resource_row = QWidget(self)
+        resource_layout = QHBoxLayout(self.resource_row)
+        resource_layout.setContentsMargins(0, 0, 0, 0)
+        resource_layout.setSpacing(4)
+        resource_layout.addWidget(self.resource, 1)
+        self.refresh_btn = QPushButton("扫描", self)
+        self.refresh_btn.setFixedWidth(52)
+        self.refresh_btn.setToolTip("重新扫描当前可用的串口")
+        self.refresh_btn.clicked.connect(self._populate_serial_ports)
+        resource_layout.addWidget(self.refresh_btn)
+        self._populate_serial_ports(serial_resource)
+        self.resource.setToolTip("可扫描选择 COM 口，也可直接输入")
         self.serial_resource_label = QLabel("串口资源", self)
-        form.addRow(self.serial_resource_label, self.resource)
+        form.addRow(self.serial_resource_label, self.resource_row)
 
         self.gpib_resource = ThemedComboBox(self)
         self.gpib_resource.setEditable(True)
@@ -140,6 +148,40 @@ class SerialDialog(QDialog):
         self._sync_mode()
 
     @staticmethod
+    def _com_resource(value: str) -> str:
+        text = value.strip().upper()
+        if text.startswith("ASRL"):
+            number = text.removeprefix("ASRL").split("::", 1)[0]
+            if number.isdigit():
+                return f"COM{number}"
+        return text
+
+    def _populate_serial_ports(self, selected: str | None = None) -> None:
+        current = selected or self._resource_value()
+        current_com = self._com_resource(current)
+        self.resource.blockSignals(True)
+        self.resource.clear()
+        ports = list_serial_ports()
+        for port in ports:
+            label = port.device
+            if port.description:
+                label += f"    {port.description}"
+            self.resource.addItem(label, port.device)
+        index = self.resource.findData(current_com)
+        if index >= 0:
+            self.resource.setCurrentIndex(index)
+        elif current:
+            self.resource.addItem(current, current)
+            self.resource.setCurrentIndex(self.resource.count() - 1)
+        self.resource.blockSignals(False)
+
+    def _resource_value(self) -> str:
+        data = self.resource.currentData()
+        if data:
+            return str(data)
+        return self.resource.currentText().strip()
+
+    @staticmethod
     def _select(combo: QComboBox, value) -> None:
         index = combo.findData(value)
         if index >= 0:
@@ -148,7 +190,7 @@ class SerialDialog(QDialog):
     def _sync_mode(self) -> None:
         gpib = self.interface.currentData() == "gpib"
         self.serial_resource_label.setVisible(not gpib)
-        self.resource.setVisible(not gpib)
+        self.resource_row.setVisible(not gpib)
         self.gpib_resource_label.setVisible(gpib)
         self.gpib_resource.setVisible(gpib)
         self.serial_hint.setVisible(not gpib)
@@ -163,7 +205,7 @@ class SerialDialog(QDialog):
         resource = (
             self.gpib_resource.currentText().strip()
             if interface == "gpib"
-            else self.resource.currentText().strip()
+            else self._resource_value()
         )
         return SerialSettings(
             resource=resource,
