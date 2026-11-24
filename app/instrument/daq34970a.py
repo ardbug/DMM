@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.constants import OVLD_THRESHOLD
 from app.domain.models import InstrumentStatus, Reading, SerialSettings
@@ -270,6 +270,21 @@ class Daq34970A:
             raw=raw,
             timestamp_ns=0,
         )
+
+    def set_nplc(self, config: DaqConfig) -> None:
+        """只更新积分时间，不重发 CONF/ROUT:SCAN，避免量程/通道继电器动作。"""
+        if config.function in {"FREQ", "PER"}:
+            return
+        if config.scan:
+            channels = _format_channels(parse_channels(config.scan_list))
+        else:
+            channels = str(int(config.channel))
+        sensor = "TEMP" if config.function == "TEMP" else config.function
+        self._io.write_line(
+            f"SENS:{sensor}:NPLC {config.nplc:g},(@{channels})"
+        )
+        if self.status is not None:
+            self.status = replace(self.status, nplc=f"{config.nplc:g}")
 
     def set_display(self, on: bool) -> None:
         self._io.write_line(f"DISP {'ON' if on else 'OFF'}")

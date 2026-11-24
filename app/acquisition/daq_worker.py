@@ -26,6 +26,7 @@ class DaqWorker(QThread):
         self._commands: queue.Queue[tuple] = queue.Queue()
         self._device: Daq34970A | None = None
         self._config: DaqConfig | None = None
+        self._last_hardware_config: DaqConfig | None = None
         self._acquiring = False
         self._shutdown = False
 
@@ -86,10 +87,13 @@ class DaqWorker(QThread):
             self._set_state("opening", f"正在打开 {settings.resource}…")
             device.open(settings)
             self._device = device
+            self._config = None
             self._set_state("ready", "34970A 已连接")
         elif kind == "close":
             self._acquiring = False
             device, self._device = self._device, None
+            self._config = None
+            self._last_hardware_config = None
             if device is not None:
                 device.close()
             self._set_state("disconnected", "34970A 已关闭")
@@ -97,8 +101,19 @@ class DaqWorker(QThread):
             self._config = payload
             if self._device is None:
                 raise RuntimeError("34970A 未打开")
-            self._set_state("opening", "正在配置通道…")
-            self._device.configure(self._config)
+            old_config = self._last_hardware_config
+            incremental = (
+                old_config is not None
+                and self._same_hardware(old_config, self._config)
+            )
+            if incremental:
+                if old_config.nplc != self._config.nplc:
+                    self._device.set_nplc(self._config)
+                self._last_hardware_config = self._config
+            else:
+                self._set_state("opening", "正在配置通道…")
+                self._device.configure(self._config)
+                self._last_hardware_config = self._config
             if self._device.status is not None:
                 self.status_updated.emit(self._device.status)
             self._acquiring = True
@@ -129,10 +144,32 @@ class DaqWorker(QThread):
         elif kind == "shutdown":
             self._acquiring = False
             device, self._device = self._device, None
+            self._config = None
+            self._last_hardware_config = None
             if device is not None:
                 device.close()
             self._set_state("disconnected", "34970A 已关闭")
             self._shutdown = True
+
+    @staticmethod
+    def _same_hardware(a, b) -> bool:
+        return (
+            a.channel,
+            a.function,
+            a.range_value,
+            a.temperature,
+            a.temp_unit,
+            a.scan,
+            a.scan_list,
+        ) == (
+            b.channel,
+            b.function,
+            b.range_value,
+            b.temperature,
+            b.temp_unit,
+            b.scan,
+            b.scan_list,
+        )
 
     def _read_once(self) -> None:
         assert self._device is not None
