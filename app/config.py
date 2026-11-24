@@ -35,21 +35,40 @@ class AppConfig:
         self._settings = QSettings(str(self.path), QSettings.Format.IniFormat)
 
     # ---- 串口 ----
+    def serial_resource(self) -> str:
+        return str(
+            self._settings.value("connection/resource", DEFAULT_RESOURCE)
+        )
+
+    def gpib_resource(self) -> str:
+        return str(self._settings.value("connection/gpib_resource", "gpib0,1"))
+
     def serial_settings(self) -> SerialSettings:
         s = self._settings
+        interface = str(s.value("connection/interface", "serial"))
+        if interface not in {"serial", "gpib"}:
+            interface = "serial"
+        resource = self.gpib_resource() if interface == "gpib" else self.serial_resource()
         return SerialSettings(
-            resource=str(s.value("connection/resource", DEFAULT_RESOURCE)),
+            resource=resource,
             baud_rate=_int_value(s.value("connection/baud_rate"), DEFAULT_BAUD_RATE),
             data_bits=_int_value(s.value("connection/data_bits"), DEFAULT_DATA_BITS),
             parity=str(s.value("connection/parity", DEFAULT_PARITY)),
             stop_bits=_int_value(s.value("connection/stop_bits"), DEFAULT_STOP_BITS),
-            flow_control=str(s.value("connection/flow_control", DEFAULT_FLOW_CONTROL)),
+            flow_control=str(
+                s.value("connection/flow_control", DEFAULT_FLOW_CONTROL)
+            ),
             timeout_ms=_int_value(s.value("connection/timeout_ms"), DEFAULT_TIMEOUT_MS),
+            interface=interface,
         )
 
     def save_serial_settings(self, settings: SerialSettings) -> None:
         s = self._settings
-        s.setValue("connection/resource", settings.resource)
+        s.setValue("connection/interface", settings.interface)
+        if settings.interface == "gpib":
+            s.setValue("connection/gpib_resource", settings.resource)
+        else:
+            s.setValue("connection/resource", settings.resource)
         s.setValue("connection/baud_rate", settings.baud_rate)
         s.setValue("connection/data_bits", settings.data_bits)
         s.setValue("connection/parity", settings.parity)

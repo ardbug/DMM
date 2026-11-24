@@ -26,6 +26,7 @@ class SerialSettings:
     stop_bits: int = DEFAULT_STOP_BITS
     flow_control: str = DEFAULT_FLOW_CONTROL
     timeout_ms: int = DEFAULT_TIMEOUT_MS
+    interface: str = "serial"
 
 
 @dataclass(frozen=True, slots=True)

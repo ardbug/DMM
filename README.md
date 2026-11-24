@@ -1,12 +1,12 @@
 # Hewlett Packard 34401A 上位机
 
-Windows 桌面程序，用于 HP / Agilent / Keysight 34401A 台式万用表的串口通信、连续采集、趋势显示和 CSV 记录。
+Windows 桌面程序，用于 HP / Agilent / Keysight 34401A 台式万用表的串口 / GPIB 通信、连续采集、趋势显示和 CSV 记录。
 
 技术栈：Python 3.14、PySide6（Qt Widgets）、PyVISA、pyserial。
 
 ## 功能
 
-- 串口打开/关闭、`*IDN?` 握手、单次读数
+- 串口 / GPIB 打开关闭、`*IDN?` 握手、单次读数
 - DCV / ACV / DCI / ACI / 2WΩ / 4WΩ / 频率 / 周期 / 导通 / 二极管
 - 连续采集、可调最高采样率、NPLC、自动/手动量程、AZ、Null
 - 实时读数、趋势图、记录列表
@@ -29,6 +29,19 @@ Windows 桌面程序，用于 HP / Agilent / Keysight 34401A 台式万用表的�
 | 线缆 | null-modem |
 
 程序也接受 `COM10`、`ASRL10`、`ASRL10::INSTR` 形式的串口资源。
+
+## GPIB
+
+- 左侧“接口”选择 `GPIB`，地址填写 `gpib0,1` 或 `GPIB0::1::INSTR`。
+- 34401A 出厂 GPIB 地址通常是 1。
+- GPIB 通过 Keysight SICL 小桥接程序 `tools/sicl_bridge.exe` 通信，串口仍走 VISA。
+- 首次使用或重新克隆仓库后，在本机编译桥接程序：
+
+```powershell
+tools\build_sicl_bridge.bat
+```
+
+编译需要 Visual Studio Build Tools 和 Keysight IO Libraries Suite。桥接程序是本地构建产物，不提交到仓库。
 
 ## 界面
 
@@ -77,4 +90,4 @@ VDC_mmdd_hhmm.csv
 - 所有代码都由AI编写，未经过完全验证
 - 程序不会修改注册表、环境变量或 Windows 电源设置。
 - 串口、功能和界面配置保存在用户配置目录。
-- GPIB 和多设备支持尚未实现。
+- 多设备、34970A 支持尚未实现。

@@ -6,9 +6,10 @@
  *   example: sicl_bridge.exe gpib0,1 10000
  *
  * Protocol on stdin/stdout, one record per line:
- *   Q:<scpi>   write command, then read one response -> O:<response>
- *   W:<scpi>   write command without reading        -> O:
- *   X          close and exit
+ *   Q:[timeout:]scpi  write command, read response -> O:<response>
+ *   R:<timeout>       read response only           -> O:<response>
+ *   W:<scpi>          write command without reading -> O:
+ *   X                 close and exit
  *
  * Errors are reported as E:<sicl-status>.
  */
@@ -62,28 +63,39 @@ int main(int argc, char **argv)
 
         strip_eol(line, length);
         length = strlen(line);
-        if (length < 2) {
-            continue;
-        }
         kind = (char)toupper((unsigned char)line[0]);
         if (kind == 'X') {
             break;
         }
-        if (line[1] != ':' || (kind != 'Q' && kind != 'W')) {
+        if (length < 2) {
+            continue;
+        }
+        if (line[1] != ':' || (kind != 'Q' && kind != 'W' && kind != 'R')) {
             printf("E:bad-command\n");
             continue;
         }
 
         command = line + 2;
-        status = iwrite(id, command, (unsigned long)strlen(command),
-                        1, &written);
-        if (status < 0) {
-            printf("E:%d\n", status);
-            continue;
+        if (kind == 'Q' || kind == 'R') {
+            char *end = NULL;
+            long timeout = strtol(command, &end, 10);
+            if (end != command && *end == ':') {
+                itimeout(id, (int)timeout);
+                command = end + 1;
+            }
         }
-        if (kind == 'W') {
-            printf("O:\n");
-            continue;
+
+        if (kind != 'R') {
+            status = iwrite(id, command, (unsigned long)strlen(command),
+                            1, &written);
+            if (status < 0) {
+                printf("E:%d\n", status);
+                continue;
+            }
+            if (kind == 'W') {
+                printf("O:\n");
+                continue;
+            }
         }
 
         {

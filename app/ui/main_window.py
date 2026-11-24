@@ -101,7 +101,7 @@ class MainWindow(QMainWindow):
         if geometry:
             self.restoreGeometry(geometry)
 
-        self._on_state("disconnected", "串口未打开")
+        self._on_state("disconnected", "连接未打开")
         QTimer.singleShot(500, self._auto_open_serial)
 
     def _build_ui(self) -> None:
@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
         settings_action = QAction("串口设置…", self)
         settings_action.triggered.connect(self._open_serial_dialog)
         comm_menu.addAction(settings_action)
-        self.open_action = QAction("打开串口", self)
+        self.open_action = QAction("打开连接", self)
         self.open_action.triggered.connect(self._toggle_connection)
         comm_menu.addAction(self.open_action)
 
@@ -326,7 +326,7 @@ class MainWindow(QMainWindow):
         self.readout_panel.set_rate(None)
         self.error_banner.hide()
         self.open_action.setEnabled(False)
-        self.open_action.setText("正在打开串口…")
+        self.open_action.setText("正在打开连接…")
         self.status_state.setText(f"正在打开 {settings.resource}…")
         self.controller.open_connection(
             settings,
@@ -350,6 +350,7 @@ class MainWindow(QMainWindow):
             stop_bits=settings.stop_bits,
             flow_control=settings.flow_control,
             timeout_ms=3000,
+            interface=settings.interface,
         )
         self._auto_open_pending = True
         self._open_connection(
@@ -382,6 +383,13 @@ class MainWindow(QMainWindow):
         self.controller.close_connection()
 
     def _open_serial_dialog(self) -> None:
+        if self._config.serial_settings().interface == "gpib":
+            QMessageBox.information(
+                self,
+                "串口设置",
+                "当前使用 GPIB。请先在左侧“接口”切换为串口，再修改串口参数。",
+            )
+            return
         dialog = SerialDialog(self._config.serial_settings(), self)
         if not dialog.exec():
             return
@@ -406,11 +414,11 @@ class MainWindow(QMainWindow):
         self.status_state.setText(detail)
         self.open_action.setEnabled(state not in {"opening", "stopping"})
         if state == "opening":
-            self.open_action.setText("正在打开串口…")
+            self.open_action.setText("正在打开连接…")
         elif state in {"local", "ready", "reading", "acquiring", "stopping"}:
-            self.open_action.setText("关闭串口")
+            self.open_action.setText("关闭连接")
         else:
-            self.open_action.setText("打开串口")
+            self.open_action.setText("打开连接")
         remote_ready = state in {"ready", "reading", "acquiring", "stopping"}
         self.tool_panel.csv_btn.setEnabled(remote_ready)
         self.scpi_action.setEnabled(remote_ready or state == "local")
@@ -441,7 +449,7 @@ class MainWindow(QMainWindow):
             if self._auto_open_failed:
                 self._auto_open_failed = False
                 self.status_state.setText(
-                    "自动打开串口失败；请在“通信 → 串口设置”检查端口后手动打开"
+                    "自动打开连接失败；请检查端口或 GPIB 地址后手动打开"
                 )
         if state == "disconnected" and self._reopen_after_close:
             self._reopen_after_close = False
@@ -803,10 +811,10 @@ class MainWindow(QMainWindow):
         if self._auto_open_pending:
             self._auto_open_pending = False
             self._auto_open_failed = True
-            log.warning("启动自动打开串口失败：%s：%s", title, detail)
+            log.warning("启动自动打开连接失败：%s：%s", title, detail)
             self.error_banner.hide()
             self.status_state.setText(
-                "自动打开串口失败；请在“通信 → 串口设置”检查端口后手动打开"
+                "自动打开连接失败；请检查端口或 GPIB 地址后手动打开"
             )
             return
         log.error("%s：%s", title, detail)

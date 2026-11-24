@@ -1,4 +1,5 @@
 from app.config import AppConfig
+from app.domain.models import SerialSettings
 from app.domain.models import AcquisitionConfig
 
 
@@ -26,6 +27,21 @@ def test_acquisition_config_roundtrip_ignores_range(tmp_path) -> None:
     )
     config.save_acquisition_config(expected)
     assert config.acquisition_config() == expected
+
+
+def test_connection_interface_roundtrip(tmp_path) -> None:
+    config = AppConfig(tmp_path / "settings.ini")
+    config.save_serial_settings(
+        SerialSettings(resource="gpib0,1", interface="gpib")
+    )
+    assert config.serial_settings().interface == "gpib"
+    assert config.serial_settings().resource == "gpib0,1"
+    config.save_serial_settings(
+        SerialSettings(resource="ASRL3::INSTR", interface="serial")
+    )
+    assert config.serial_settings().interface == "serial"
+    assert config.serial_settings().resource == "ASRL3::INSTR"
+    assert config.gpib_resource() == "gpib0,1"
 
 
 def test_tool_section_order_roundtrip(tmp_path) -> None:

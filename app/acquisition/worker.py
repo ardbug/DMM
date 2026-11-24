@@ -113,7 +113,7 @@ class AcqWorker(QThread):
 
     def run(self) -> None:
         log.info("I/O 线程启动")
-        self._set_state(WorkerState.DISCONNECTED, "串口未打开")
+        self._set_state(WorkerState.DISCONNECTED, "连接未打开")
         try:
             while not self._shutdown:
                 # 先处理所有已排队命令，保证停止/改配置能插进批次边界。
@@ -194,7 +194,15 @@ class AcqWorker(QThread):
         self._acquisition = None
         self._plan = None
         self._set_state(WorkerState.OPENING, f"正在打开 {command.settings.resource}…")
-        dmm = Dmm()
+        if command.settings.interface == "gpib":
+            from app.transport.sicl_gpib import SiclGpibIO
+
+            io = SiclGpibIO()
+        else:
+            from app.transport.visa_io import VisaIO
+
+            io = VisaIO()
+        dmm = Dmm(io)
         if not command.remote:
             try:
                 dmm.open_local(command.settings)
@@ -202,8 +210,8 @@ class AcqWorker(QThread):
                 dmm.close(restore_local=False)
                 raise
             self._dmm = dmm
-            self._set_state(WorkerState.LOCAL, "串口已打开（RMT 关闭，仅本地）")
-            self.notice.emit("RMT 关闭：只打开串口，不控制仪器")
+            self._set_state(WorkerState.LOCAL, "连接已打开（RMT 关闭，仅本地）")
+            self.notice.emit("RMT 关闭：只打开连接，不控制仪器")
             return
         try:
             identity = dmm.open(
@@ -222,27 +230,27 @@ class AcqWorker(QThread):
 
     def _close(self) -> None:
         if self._dmm is None:
-            self._set_state(WorkerState.DISCONNECTED, "串口未打开")
+            self._set_state(WorkerState.DISCONNECTED, "连接未打开")
             return
         local_only = self._dmm.local_only
         self._acquiring = False
         self._stop_requested = False
         self._set_state(
             WorkerState.CLOSING,
-            "正在关闭串口…" if local_only else "正在回本地并关闭…",
+            "正在关闭连接…" if local_only else "正在回本地并关闭…",
         )
         dmm, self._dmm = self._dmm, None
         dmm.close(restore_local=not local_only)
         if local_only:
-            self._set_state(WorkerState.DISCONNECTED, "串口已关闭")
-            self.notice.emit("串口已关闭")
+            self._set_state(WorkerState.DISCONNECTED, "连接已关闭")
+            self.notice.emit("连接已关闭")
         else:
             self._set_state(WorkerState.DISCONNECTED, "已关闭，仪器已回本地")
-            self.notice.emit("串口已关闭，仪器已回本地模式")
+            self.notice.emit("连接已关闭，仪器已回本地模式")
 
     def _identify(self) -> None:
         if self._dmm is None:
-            raise RuntimeError("串口未打开")
+            raise RuntimeError("连接未打开")
         identity = self._dmm.identify()
         self.identity_received.emit(identity)
         self.notice.emit("*IDN? 已返回")
@@ -251,7 +259,7 @@ class AcqWorker(QThread):
 
     def _configure(self, config: AcquisitionConfig) -> None:
         if self._dmm is None:
-            raise RuntimeError("串口未打开")
+            raise RuntimeError("连接未打开")
         previous = self._acquisition
         # 只改采样率/显示位数/平均设置时不必重发仪器配置。
         if previous is None or self._instrument_config_changed(previous, config):
@@ -278,7 +286,7 @@ class AcqWorker(QThread):
 
     def _start_acquisition(self, config: AcquisitionConfig) -> None:
         if self._dmm is None:
-            raise RuntimeError("串口未打开")
+            raise RuntimeError("连接未打开")
         if self._acquiring:
             return
         # MainWindow 在连接后会先下发一次配置；相同配置不要重复下发，
@@ -485,13 +493,13 @@ class AcqWorker(QThread):
         else:
             log.error("通信恢复失败")
             self._close_after_failure()
-            self._set_state(WorkerState.ERROR, "通信恢复失败，请重新打开串口")
+            self._set_state(WorkerState.ERROR, "通信恢复失败，请重新打开连接")
 
     # ---------- 单次/诊断 ----------
 
     def _single_read(self) -> None:
         if self._dmm is None:
-            raise RuntimeError("串口未打开")
+            raise RuntimeError("连接未打开")
         if self._acquiring:
             raise RuntimeError("连续采集进行中，不能单次读数")
         config = self._acquisition
@@ -538,7 +546,7 @@ class AcqWorker(QThread):
                 self._set_state(WorkerState.READY, "通信已恢复，请重试")
             else:
                 self._close_after_failure()
-                self._set_state(WorkerState.ERROR, "通信恢复失败，请重新打开串口")
+                self._set_state(WorkerState.ERROR, "通信恢复失败，请重新打开连接")
             return
         self.reading_received.emit(reading)
         if self._dmm.status is not None:
@@ -547,19 +555,19 @@ class AcqWorker(QThread):
 
     def _set_display(self, on: bool) -> None:
         if self._dmm is None:
-            raise RuntimeError("串口未打开")
+            raise RuntimeError("连接未打开")
         self._dmm.set_display(on)
         self.notice.emit("VFD 显示已" + ("开启" if on else "关闭"))
 
     def _set_beeper(self, on: bool) -> None:
         if self._dmm is None:
-            raise RuntimeError("串口未打开")
+            raise RuntimeError("连接未打开")
         self._dmm.set_beeper(on)
         self.notice.emit("蜂鸣器已" + ("开启" if on else "关闭"))
 
     def _scpi(self, text: str) -> None:
         if self._dmm is None:
-            raise RuntimeError("串口未打开")
+            raise RuntimeError("连接未打开")
         if self._state == WorkerState.ACQUIRING:
             self.scpi_result.emit(text, "采集进行中，请先停止采集")
             return
@@ -581,7 +589,7 @@ class AcqWorker(QThread):
             self._acquiring = False
             self._stop_requested = False
         self.error_occurred.emit(title, detail)
-        self._set_state(WorkerState.ERROR, "操作失败，可重新打开串口")
+        self._set_state(WorkerState.ERROR, "操作失败，可重新打开连接")
 
     def _close_after_failure(self) -> None:
         if self._dmm is not None:
@@ -596,7 +604,7 @@ class AcqWorker(QThread):
                 dmm.close(restore_local=True)
             except Exception:
                 log.exception("退出时收尾失败")
-        self._set_state(WorkerState.DISCONNECTED, "串口未打开")
+        self._set_state(WorkerState.DISCONNECTED, "连接未打开")
 
     def _set_state(self, state: str, detail: str) -> None:
         self._state = state

@@ -35,8 +35,8 @@ class DmmError(RuntimeError):
 
 
 class Dmm:
-    def __init__(self) -> None:
-        self._io = VisaIO()
+    def __init__(self, io=None) -> None:
+        self._io = io if io is not None else VisaIO()
         self.identity = ""
         self.status: InstrumentStatus | None = None
         self.local_only = False
@@ -262,10 +262,27 @@ class Dmm:
         info = self.status.function
         perf_start = time.perf_counter_ns()
         wall_start = time.time_ns()
-        raw, write_done, read_done = self._io.query_line_timed("READ?", timeout_ms)
-        tokens = [token.strip() for token in raw.split(",")]
+        batch_timed = getattr(self._io, "query_batch_timed", None)
+        if batch_timed is not None:
+            raw_lines, write_done, read_done = batch_timed(
+                "READ?", count, timeout_ms
+            )
+        else:
+            raw, write_done, read_done = self._io.query_line_timed(
+                "READ?", timeout_ms
+            )
+            raw_lines = [raw]
+        tokens = [
+            token.strip()
+            for line in raw_lines
+            for token in line.split(",")
+            if token.strip()
+        ]
         if len(tokens) != count:
-            raise DmmError(f"批量读数条数不符：期望 {count}，实际 {len(tokens)}：{raw[:80]}")
+            raise DmmError(
+                f"批量读数条数不符：期望 {count}，实际 {len(tokens)}："
+                f"{','.join(raw_lines)[:80]}"
+            )
         try:
             values = [float(token) for token in tokens]
         except ValueError as exc:
