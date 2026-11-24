@@ -197,13 +197,23 @@ class SiclGpibIO:
     ) -> tuple[str, int, int]:
         if self._pending_query:
             raise SiclGpibError("上一轮查询尚未读完，拒绝发送新查询")
+        if self._bridge is None:
+            raise SiclGpibError("GPIB 未打开")
+        self._ascii(command)
         self._pending_query = True
+        timeout = self._timeout_ms if timeout_ms is None else int(timeout_ms)
         try:
-            self.write_line(command)
-            write_done = time.perf_counter_ns()
-            text = self.read_line(timeout_ms)
+            start = time.perf_counter_ns()
+            text = self._bridge.query(command, timeout)
             read_done = time.perf_counter_ns()
-            return text, write_done, read_done
+            serial_log.record("TX", command.encode("ascii") + b"\n")
+            serial_log.record(
+                "RX", text.encode("ascii", errors="replace") + b"\n"
+            )
+            if not text:
+                raise SiclGpibError("仪器返回空行")
+            # GPIB 桥的命令是一问一答，写入完成时刻近似取查询开始时刻。
+            return text, start, read_done
         finally:
             self._pending_query = False
 

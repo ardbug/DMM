@@ -272,7 +272,9 @@ class AcqWorker(QThread):
         ):
             self._clear_average()
         self._acquisition = config
-        self._plan = plan_rate(config)
+        self._plan = plan_rate(
+            config, getattr(self._dmm, "interface", "serial")
+        )
         self._config_version += 1
         self.status_updated.emit(self._dmm.status)
         self.config_applied.emit(self._config_version, config)
@@ -298,7 +300,9 @@ class AcqWorker(QThread):
         ):
             self._dmm.apply_config(config)
         self._acquisition = config
-        self._plan = plan_rate(config)
+        self._plan = plan_rate(
+            config, getattr(self._dmm, "interface", "serial")
+        )
         self._config_version += 1
         self._batch_id = 0
         self._last_ts_ns = 0

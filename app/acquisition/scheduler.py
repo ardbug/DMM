@@ -24,7 +24,9 @@ class RatePlan:
     uniform: bool = True
 
 
-def capability_for(nplc: float, az: bool) -> float:
+def capability_for(
+    nplc: float, az: bool, interface: str = "serial"
+) -> float:
     """逐条 `READ?` 的规划上限（条/秒）。
 
     实测（DCV、固定量程、9600-7E2，单条读取中位耗时）：
@@ -38,6 +40,17 @@ def capability_for(nplc: float, az: bool) -> float:
     NPLC 1 及以上不可能达到 30 条/秒。
     """
 
+    if interface == "gpib":
+        # 34401A 的 GPIB 读取上限高于串口；实际值由界面速率反馈。
+        if nplc <= 0.02:
+            return 500.0 if not az else 300.0
+        if nplc <= 0.2:
+            return 200.0 if not az else 120.0
+        if nplc <= 1.0:
+            return 40.0 if not az else 25.0
+        if nplc <= 10.0:
+            return 4.0 if not az else 2.5
+        return 0.4
     if nplc <= 0.02:
         return 30.0
     if nplc <= 0.2:
@@ -49,8 +62,10 @@ def capability_for(nplc: float, az: bool) -> float:
     return 0.4
 
 
-def plan_rate(config: AcquisitionConfig) -> RatePlan:
-    capability = capability_for(config.nplc, config.az)
+def plan_rate(
+    config: AcquisitionConfig, interface: str = "serial"
+) -> RatePlan:
+    capability = capability_for(config.nplc, config.az, interface)
     average_count = (
         max(1, int(config.average_count)) if config.average_enabled else 1
     )

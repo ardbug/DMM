@@ -44,6 +44,17 @@ def test_002_nplc_30hz_is_single_read() -> None:
     assert plan.limited is False
 
 
+def test_gpib_has_higher_capability_than_serial() -> None:
+    plan = plan_rate(
+        AcquisitionConfig(nplc=0.02, rate=1000, az=False),
+        interface="gpib",
+    )
+    assert plan.capability == 500
+    assert plan.effective == 500
+    assert plan.period_ns == 2_000_000
+    assert plan.limited is True
+
+
 def test_02_nplc_30hz_is_single_read() -> None:
     plan = plan_rate(AcquisitionConfig(nplc=0.2, rate=30, az=False))
     assert plan.effective == 30

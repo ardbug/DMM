@@ -40,6 +40,7 @@ class Dmm:
         self.identity = ""
         self.status: InstrumentStatus | None = None
         self.local_only = False
+        self.interface = "serial"
 
     @property
     def is_open(self) -> bool:
@@ -49,6 +50,7 @@ class Dmm:
         """只打开串口，不发送任何 SCPI，不把仪器切到远程。"""
 
         self._io.open(settings)
+        self.interface = settings.interface
         self.local_only = True
         self.status = None
         self.identity = ""
@@ -61,6 +63,7 @@ class Dmm:
         handshake_timeout_ms: int = HANDSHAKE_TIMEOUT_MS,
     ) -> str:
         self._io.open(settings)
+        self.interface = settings.interface
         self.local_only = False
         try:
             # 手册 P161：先进入远程，再清状态，再握手。
