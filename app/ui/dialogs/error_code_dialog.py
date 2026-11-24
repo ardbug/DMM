@@ -35,7 +35,9 @@ class ErrorCodeDialog(QDialog):
         top.addWidget(self.model_combo)
         top.addSpacing(8)
         self.search = QLineEdit(self)
-        self.search.setPlaceholderText("输入错误码或关键词，例如 513、parity、RS-232")
+        self.search.setPlaceholderText(
+            "输入错误码或关键词，多个用逗号分隔，例如 513，514"
+        )
         self.search.setClearButtonEnabled(True)
         top.addWidget(self.search, 1)
         self.count_label = QLabel("", self)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from app.domain.models import ScpiError
 
 _CODES: dict[int, str] = {
@@ -381,14 +383,25 @@ def filter_error_codes(
     """按错误码或英文说明过滤；空查询返回全部。"""
 
     table = ERROR_CODE_TABLES.get(model.upper(), ())
-    text = query.strip().lower()
-    if not text:
-        return list(table)
-    return [
-        (code, description)
-        for code, description in table
-        if text in code.lower() or text in description.lower()
+    tokens = [
+        token.strip().lower()
+        for token in re.split(r"[,，]", query)
+        if token.strip()
     ]
+    if not tokens:
+        return list(table)
+
+    result: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for token in tokens:
+        for code, description in table:
+            item = (code, description)
+            if item in seen:
+                continue
+            if token in code.lower() or token in description.lower():
+                seen.add(item)
+                result.append(item)
+    return result
 
 
 def describe_error(error: ScpiError | int) -> str:

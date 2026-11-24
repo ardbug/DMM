@@ -28,6 +28,29 @@ def test_error_code_lookup_by_code_and_keyword() -> None:
     assert filter_error_codes("+0") == [("+0", "No error")]
 
 
+def test_multiple_error_codes_are_grouped_in_input_order() -> None:
+    assert filter_error_codes("514,513") == [
+        ("514", "Command allowed only with RS-232"),
+        ("513", "RS-232 parity error"),
+    ]
+    assert filter_error_codes("514，513") == [
+        ("514", "Command allowed only with RS-232"),
+        ("513", "RS-232 parity error"),
+    ]
+    assert filter_error_codes(" 513 , 514 ") == [
+        ("513", "RS-232 parity error"),
+        ("514", "Command allowed only with RS-232"),
+    ]
+
+
+def test_multiple_error_codes_do_not_duplicate_results() -> None:
+    result = filter_error_codes("51,513")
+    assert len(result) == len(set(result))
+    assert result.index(("513", "RS-232 parity error")) < result.index(
+        ("514", "Command allowed only with RS-232")
+    )
+
+
 def test_34970a_error_lookup() -> None:
     assert filter_error_codes("", "34970A") == list(ERROR_CODES_34970A)
     assert filter_error_codes("514", "34970A") == [
