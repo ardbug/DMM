@@ -156,6 +156,8 @@ class ReadoutPanel(QFrame):
         self._resolution_base = 0.0
         self._full_scale_base = 0.0
         self._extra_decimals = 0
+        self._daq_mode = False
+        self._daq_nplc = 1.0
         self._display_unit_label = ""
         self._status: InstrumentStatus | None = None
         self._display_interval_ms = 33
@@ -223,6 +225,17 @@ class ReadoutPanel(QFrame):
         # 不要在这里重算量程：旧的 _last_reading 被清空后，
         # _update_range_label 会暂时退回 status.range_text，造成量程闪一下。
         # 量程保留到第一条新读数/新的仪器状态到达。
+
+    def set_daq_mode(self, enabled: bool = True, nplc: float = 1.0) -> None:
+        """34970A 页面不显示精度误差/位数，只显示当前 NPLC。"""
+        self._daq_mode = enabled
+        self._daq_nplc = nplc
+        self.accuracy_label.setVisible(not enabled)
+        self.tier_label.setVisible(not enabled)
+        if enabled:
+            self.range_label.setText(f"NPLC {nplc:g}")
+        else:
+            self._update_range_label()
 
     def set_extra_decimals(self, extra_decimals: int) -> None:
         extra_decimals = max(0, min(9, int(extra_decimals)))
@@ -321,6 +334,9 @@ class ReadoutPanel(QFrame):
         self._update_accuracy()
 
     def _update_range_label(self) -> None:
+        if self._daq_mode:
+            self.range_label.setText(f"NPLC {self._daq_nplc:g}")
+            return
         status = self._status
         if status is None:
             self.range_label.setText(f"量程 — · {self._digits}")

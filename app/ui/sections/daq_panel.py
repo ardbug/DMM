@@ -47,6 +47,7 @@ _TEMPS = (
 
 
 class DaqPanel(QFrame):
+    config_changed = Signal()
     open_requested = Signal(object)
     close_requested = Signal()
     start_requested = Signal(object)
@@ -176,6 +177,12 @@ class DaqPanel(QFrame):
         self.interface.currentIndexChanged.connect(self._sync_interface)
         self.function.currentIndexChanged.connect(self._sync_function)
         self.channel.valueChanged.connect(self._sync_channel)
+        self.function.currentIndexChanged.connect(self.config_changed)
+        self.temp_sensor.currentIndexChanged.connect(self.config_changed)
+        self.temp_unit.currentIndexChanged.connect(self.config_changed)
+        self.nplc.currentIndexChanged.connect(self.config_changed)
+        self.rate.valueChanged.connect(self.config_changed)
+        self.channel.valueChanged.connect(self.config_changed)
         self._sync_interface()
         self._sync_function()
         self._sync_channel()

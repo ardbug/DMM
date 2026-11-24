@@ -67,6 +67,7 @@ class DaqWindow(QMainWindow):
         self.panel = DaqPanel(config, splitter)
         right = QSplitter(Qt.Orientation.Vertical, splitter)
         self.readout = ReadoutPanel(right)
+        self.readout.set_daq_mode(True, 1.0)
         self.trend = TrendPanel(self._ring, right)
         right.addWidget(self.readout)
         right.addWidget(self.trend)
@@ -101,6 +102,11 @@ class DaqWindow(QMainWindow):
         self.panel.start_requested.connect(self._start)
         self.panel.stop_requested.connect(self._stop)
         self.panel.single_requested.connect(self._single)
+        self.panel.config_changed.connect(self._on_config_changed)
+        self._config_timer = QTimer(self)
+        self._config_timer.setSingleShot(True)
+        self._config_timer.setInterval(250)
+        self._config_timer.timeout.connect(self._apply_live_config)
         self.readout.start_stop_requested.connect(
             lambda: self._start(self.panel.config())
         )
@@ -135,11 +141,26 @@ class DaqWindow(QMainWindow):
         self._worker.submit("close")
 
     def _start(self, config: DaqConfig) -> None:
+        self._last_config = config
+        self.readout.set_daq_mode(True, config.nplc)
         if self._state == "acquiring":
             self._worker.submit("stop")
         else:
-            self._last_config = config
             self._worker.submit("start", config)
+
+    def _on_config_changed(self) -> None:
+        config = self.panel.config()
+        self.readout.set_daq_mode(True, config.nplc)
+        if self._state == "acquiring":
+            self._config_timer.start()
+
+    def _apply_live_config(self) -> None:
+        if self._state != "acquiring":
+            return
+        config = self.panel.config()
+        self._last_config = config
+        self.readout.set_daq_mode(True, config.nplc)
+        self._worker.submit("start", config)
 
     def _stop(self) -> None:
         self._worker.submit("stop")
