@@ -194,9 +194,6 @@ class DaqConnectionPanel(QFrame):
 
 class DaqParamsPanel(QFrame):
     config_changed = Signal()
-    start_requested = Signal(object)
-    stop_requested = Signal()
-    single_requested = Signal(object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -292,15 +289,6 @@ class DaqParamsPanel(QFrame):
         self._scan_rate_label = form.labelForField(self.scan_rate)
         root.addLayout(form)
 
-        actions = QHBoxLayout()
-        self.start_btn = QPushButton("开始连续读取", self)
-        self.start_btn.setObjectName("StartButton")
-        self.start_btn.clicked.connect(self._emit_start)
-        self.single_btn = QPushButton("单次", self)
-        self.single_btn.clicked.connect(self._emit_single)
-        actions.addWidget(self.start_btn)
-        actions.addWidget(self.single_btn)
-        root.addLayout(actions)
         root.addStretch(1)
 
         self.channel.valueChanged.connect(self._sync_channel)
@@ -390,19 +378,18 @@ class DaqParamsPanel(QFrame):
             scan_rate=float(self.scan_rate.value()),
         )
 
-    def _emit_start(self) -> None:
-        self.start_requested.emit(self.config())
-
-    def _emit_single(self) -> None:
-        self.single_requested.emit(self.config())
+    def selected_channel_count(self) -> int:
+        if not self.scan_check.isChecked():
+            return 1
+        return sum(
+            1
+            for index in range(self.scan_list.count())
+            if self.scan_list.item(index).checkState()
+            == Qt.CheckState.Checked
+        )
 
     def set_state(self, state: str) -> None:
         self._state = state
-        self.start_btn.setEnabled(state in {"ready", "acquiring"})
-        self.single_btn.setEnabled(state == "ready")
-        self.start_btn.setText(
-            "停止" if state == "acquiring" else "开始连续读取"
-        )
 
 
 # Backwards-compatible name used by older tests/imports.

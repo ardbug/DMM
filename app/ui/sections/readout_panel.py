@@ -158,6 +158,7 @@ class ReadoutPanel(QFrame):
         self._extra_decimals = 0
         self._daq_mode = False
         self._daq_nplc = 1.0
+        self._daq_channels = 1
         self._display_unit_label = ""
         self._status: InstrumentStatus | None = None
         self._display_interval_ms = 33
@@ -234,8 +235,20 @@ class ReadoutPanel(QFrame):
         self.tier_label.setVisible(not enabled)
         if enabled:
             self.range_label.setText(f"NPLC {nplc:g}")
+            self._update_daq_term_chip()
         else:
             self._update_range_label()
+
+    def set_daq_channels(self, count: int) -> None:
+        self._daq_channels = max(1, int(count))
+        if self._daq_mode:
+            self._update_daq_term_chip()
+
+    def _update_daq_term_chip(self) -> None:
+        self.chips["Term"].setText(f"{self._daq_channels}CH")
+        self.chips["Term"].setToolTip(
+            f"当前扫描通道数：{self._daq_channels}"
+        )
 
     def set_extra_decimals(self, extra_decimals: int) -> None:
         extra_decimals = max(0, min(9, int(extra_decimals)))
@@ -323,6 +336,11 @@ class ReadoutPanel(QFrame):
         self.chips["FILT"].set_state(bool(spec and spec.supports_ac_filter))
         if self._state in {"ready", "reading", "acquiring", "stopping"}:
             self.chips["Rmt"].set_state(True)
+        if self._daq_mode:
+            self._update_daq_term_chip()
+            self._update_range_label()
+            self._update_accuracy()
+            return
         terminal = (status.terminal or "").upper()
         if terminal == "REAR":
             self.chips["Term"].setText("Rear")

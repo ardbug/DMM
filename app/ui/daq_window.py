@@ -38,6 +38,7 @@ from app.storage.csv_writer import CsvQueueFull, CsvWriter, make_csv_path
 from app.ui.sections.daq_panel import DaqConnectionPanel, DaqParamsPanel
 from app.ui.sections.readout_panel import ReadoutPanel
 from app.ui.sections.trend_panel import TrendPanel
+from app.ui.widgets.multi_trend import MultiChannelTrend
 
 
 class DaqWindow(QMainWindow):
@@ -76,9 +77,12 @@ class DaqWindow(QMainWindow):
         center = QSplitter(Qt.Orientation.Vertical, splitter)
         self.readout = ReadoutPanel(center)
         self.readout.set_daq_mode(True, 1.0)
+        self.readout.set_daq_channels(1)
         self.trend = TrendPanel(self._ring, center)
         self.output_tabs = QTabWidget(center)
-        self.output_tabs.addTab(self.trend, "趋势")
+        self.output_tabs.addTab(self.trend, "单通道趋势")
+        self.scan_trend = MultiChannelTrend(self.output_tabs)
+        self.output_tabs.addTab(self.scan_trend, "多通道趋势")
         self.scan_table = QTableWidget(0, 5, self.output_tabs)
         self.scan_table.setHorizontalHeaderLabels(
             ["通道", "功能", "读数", "单位", "时间"]
@@ -122,9 +126,6 @@ class DaqWindow(QMainWindow):
 
         self.panel.open_requested.connect(self._open)
         self.panel.close_requested.connect(self._close)
-        self.params.start_requested.connect(self._start)
-        self.params.stop_requested.connect(self._stop)
-        self.params.single_requested.connect(self._single)
         self.params.config_changed.connect(self._on_config_changed)
         self._config_timer = QTimer(self)
         self._config_timer.setSingleShot(True)
@@ -132,6 +133,9 @@ class DaqWindow(QMainWindow):
         self._config_timer.timeout.connect(self._apply_live_config)
         self.readout.start_stop_requested.connect(
             lambda: self._start(self.params.config())
+        )
+        self.readout.single_read_requested.connect(
+            lambda: self._single(self.params.config())
         )
         self.panel.csv_toggle_requested.connect(self._toggle_csv)
         self.panel.open_csv_folder_requested.connect(self._open_csv_folder)
@@ -167,14 +171,21 @@ class DaqWindow(QMainWindow):
     def _start(self, config: DaqConfig) -> None:
         self._last_config = config
         self.readout.set_daq_mode(True, config.nplc)
+        self.readout.set_daq_channels(self.params.selected_channel_count())
         if self._state == "acquiring":
             self._worker.submit("stop")
         else:
+            if config.scan:
+                self.scan_trend.clear()
+                self.scan_table.setRowCount(0)
+                self._scan_rows.clear()
+                self.output_tabs.setCurrentWidget(self.scan_trend)
             self._worker.submit("start", config)
 
     def _on_config_changed(self) -> None:
         config = self.params.config()
         self.readout.set_daq_mode(True, config.nplc)
+        self.readout.set_daq_channels(self.params.selected_channel_count())
         if self._state == "acquiring":
             self._config_timer.start()
 
@@ -184,6 +195,7 @@ class DaqWindow(QMainWindow):
         config = self.params.config()
         self._last_config = config
         self.readout.set_daq_mode(True, config.nplc)
+        self.readout.set_daq_channels(self.params.selected_channel_count())
         self._worker.submit("start", config)
 
     def _stop(self) -> None:
@@ -229,9 +241,10 @@ class DaqWindow(QMainWindow):
                 ),
             )
         self.scan_table.scrollToBottom()
+        self.scan_trend.append_samples(samples)
         last = samples[-1][1]
         self.readout.set_reading(last)
-        self.output_tabs.setCurrentWidget(self.scan_table)
+        self.output_tabs.setCurrentWidget(self.scan_trend)
         self._record_batch(
             [
                 replace(
