@@ -27,3 +27,5 @@ def test_connection_dialog_gpib_mode() -> None:
     assert dialog.resource.currentData() == "COM6"
     assert dialog.settings().interface == "serial"
     assert dialog.settings().resource == "COM6"
+    dialog.resource.setCurrentText("COM99")
+    assert dialog.settings().resource == "COM99"

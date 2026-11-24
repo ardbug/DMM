@@ -73,7 +73,7 @@ class DaqConnectionPanel(QFrame):
                 data_bits=8,
                 parity="none",
                 stop_bits=1,
-                flow_control="none",
+                flow_control="xon_xoff",
                 timeout_ms=5000,
                 interface="gpib",
             )

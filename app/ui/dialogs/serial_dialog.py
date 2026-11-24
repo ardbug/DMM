@@ -176,10 +176,16 @@ class SerialDialog(QDialog):
         self.resource.blockSignals(False)
 
     def _resource_value(self) -> str:
+        text = self.resource.currentText().strip()
         data = self.resource.currentData()
-        if data:
+        index = self.resource.currentIndex()
+        if (
+            data
+            and index >= 0
+            and text == self.resource.itemText(index).strip()
+        ):
             return str(data)
-        return self.resource.currentText().strip()
+        return text
 
     @staticmethod
     def _select(combo: QComboBox, value) -> None:

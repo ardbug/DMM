@@ -78,6 +78,7 @@ class VisaIO:
                     "none": constants.VI_ASRL_FLOW_NONE,
                     "rts_cts": constants.VI_ASRL_FLOW_RTS_CTS,
                     "dtr_dsr": constants.VI_ASRL_FLOW_DTR_DSR,
+                    "xon_xoff": constants.VI_ASRL_FLOW_XON_XOFF,
                 }[settings.flow_control]
 
                 # 注意：不要在这里手工 set DTR/RTS。
