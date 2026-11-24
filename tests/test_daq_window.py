@@ -14,4 +14,10 @@ def test_daq_window_builds_with_gpib_default(tmp_path) -> None:
     assert "34970A" in window.windowTitle()
     assert window.panel.interface.currentData() == "gpib"
     assert window.panel.resource.currentText() == "gpib0,9"
+    window.panel.set_state("opening", "正在打开串口…")
+    assert window.panel.close_btn.isEnabled()
+    window.params.scan_check.setChecked(True)
+    config = window.params.config()
+    assert config.scan is True
+    assert config.scan_list.startswith("101,102,103")
     window.close()

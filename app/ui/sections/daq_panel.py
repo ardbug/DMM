@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -13,7 +13,8 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -180,7 +181,9 @@ class DaqConnectionPanel(QFrame):
         self.resource.setEnabled(state in {"disconnected", "error"})
         self.settings_btn.setEnabled(state in {"disconnected", "error"})
         self.open_btn.setEnabled(state in {"disconnected", "error"})
-        self.close_btn.setEnabled(connected)
+        self.close_btn.setEnabled(
+            state in {"opening", "ready", "acquiring", "stopping"}
+        )
         if detail:
             self.status.setText(detail)
 
@@ -215,8 +218,39 @@ class DaqParamsPanel(QFrame):
         self.channel.setRange(101, 122)
         self.channel.setValue(101)
         self.scan_check = QCheckBox("多通道扫描", self)
-        self.scan_list = QLineEdit("101:110", self)
-        self.scan_list.setPlaceholderText("例如 101:110,121")
+        self.scan_widget = QWidget(self)
+        scan_layout = QVBoxLayout(self.scan_widget)
+        scan_layout.setContentsMargins(0, 0, 0, 0)
+        scan_layout.setSpacing(4)
+        self.scan_list = QListWidget(self.scan_widget)
+        self.scan_list.setMaximumHeight(190)
+        for channel in range(101, 123):
+            item = QListWidgetItem(
+                f"{channel}  电流" if channel >= 121 else str(channel),
+                self.scan_list,
+            )
+            item.setData(Qt.ItemDataRole.UserRole, channel)
+            item.setFlags(
+                item.flags() | Qt.ItemFlag.ItemIsUserCheckable
+            )
+            item.setCheckState(
+                Qt.CheckState.Checked
+                if 101 <= channel <= 110
+                else Qt.CheckState.Unchecked
+            )
+        scan_layout.addWidget(self.scan_list)
+        scan_buttons = QHBoxLayout()
+        self.scan_all_btn = QPushButton("全选", self.scan_widget)
+        self.scan_none_btn = QPushButton("清空", self.scan_widget)
+        self.scan_all_btn.clicked.connect(
+            lambda: self._set_all_scan(True)
+        )
+        self.scan_none_btn.clicked.connect(
+            lambda: self._set_all_scan(False)
+        )
+        scan_buttons.addWidget(self.scan_all_btn)
+        scan_buttons.addWidget(self.scan_none_btn)
+        scan_layout.addLayout(scan_buttons)
         self.function = ThemedComboBox(self)
         for label, value in _FUNCTIONS:
             self.function.addItem(label, value)
@@ -244,8 +278,8 @@ class DaqParamsPanel(QFrame):
 
         form.addRow("通道", self.channel)
         form.addRow("", self.scan_check)
-        form.addRow("扫描列表", self.scan_list)
-        self._scan_label = form.labelForField(self.scan_list)
+        form.addRow("扫描列表", self.scan_widget)
+        self._scan_label = form.labelForField(self.scan_widget)
         form.addRow("功能", self.function)
         form.addRow("传感器", self.temp_sensor)
         self._temp_sensor_label = form.labelForField(self.temp_sensor)
@@ -272,7 +306,7 @@ class DaqParamsPanel(QFrame):
         self.channel.valueChanged.connect(self._sync_channel)
         self.scan_check.toggled.connect(self._sync_scan)
         self.function.currentIndexChanged.connect(self._sync_function)
-        self.scan_list.textChanged.connect(self.config_changed)
+        self.scan_list.itemChanged.connect(self.config_changed)
         self.function.currentIndexChanged.connect(self.config_changed)
         self.temp_sensor.currentIndexChanged.connect(self.config_changed)
         self.temp_unit.currentIndexChanged.connect(self.config_changed)
@@ -288,7 +322,7 @@ class DaqParamsPanel(QFrame):
     def _sync_scan(self) -> None:
         scan = self.scan_check.isChecked()
         self.channel.setEnabled(not scan)
-        self.scan_list.setVisible(scan)
+        self.scan_widget.setVisible(scan)
         self._scan_label.setVisible(scan)
         self.rate.setVisible(not scan)
         self._rate_label.setVisible(not scan)
@@ -321,6 +355,23 @@ class DaqParamsPanel(QFrame):
         }:
             self.function.setCurrentIndex(self.function.findData("VOLT:DC"))
 
+    def _set_all_scan(self, checked: bool) -> None:
+        state = Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+        self.scan_list.blockSignals(True)
+        for index in range(self.scan_list.count()):
+            self.scan_list.item(index).setCheckState(state)
+        self.scan_list.blockSignals(False)
+        self.config_changed.emit()
+
+    def _scan_channels(self) -> str:
+        channels = sorted(
+            int(self.scan_list.item(index).data(Qt.ItemDataRole.UserRole))
+            for index in range(self.scan_list.count())
+            if self.scan_list.item(index).checkState()
+            == Qt.CheckState.Checked
+        )
+        return ",".join(str(channel) for channel in channels)
+
     def config(self) -> DaqConfig:
         channel = int(self.channel.value())
         function = str(self.function.currentData())
@@ -335,7 +386,7 @@ class DaqParamsPanel(QFrame):
             temp_unit=str(self.temp_unit.currentData()),
             rate=float(self.rate.value()),
             scan=self.scan_check.isChecked(),
-            scan_list=self.scan_list.text().strip(),
+            scan_list=self._scan_channels(),
             scan_rate=float(self.scan_rate.value()),
         )
 

@@ -67,8 +67,16 @@ class DaqWorker(QThread):
         try:
             self._handle(kind, payload)
         except Exception as exc:
+            self._acquiring = False
             self.error_occurred.emit("34970A 操作失败", str(exc))
-            self._set_state("error", str(exc))
+            self._set_error_state(str(exc))
+
+    def _set_error_state(self, detail: str) -> None:
+        # 配置错误不应把已建立的 GPIB/串口连接变成“已断开”。
+        if self._device is not None and self._device.is_open:
+            self._set_state("ready", f"操作失败，连接保持：{detail}")
+        else:
+            self._set_state("error", detail)
 
     def _handle(self, kind: str, payload) -> None:
         if kind == "open":
@@ -136,7 +144,7 @@ class DaqWorker(QThread):
         except Exception as exc:
             self.error_occurred.emit("34970A 读数失败", str(exc))
             self._acquiring = False
-            self._set_state("error", str(exc))
+            self._set_error_state(str(exc))
         finally:
             self.read_activity.emit(False)
 
