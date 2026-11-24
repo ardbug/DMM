@@ -103,6 +103,15 @@ QGroupBox {
     margin-top: 10px; padding-top: 8px; font-weight: 600;
 }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; color: #5a6472; }
+QFrame#CollapsibleSection {
+    border: 1px solid #d8dde5; border-radius: 8px;
+    background: transparent;
+}
+QToolButton#CollapsibleHeader {
+    border: none; background: transparent; text-align: left;
+    padding: 6px 8px; color: #5a6472; font-weight: 600;
+}
+QToolButton#CollapsibleHeader:hover { background: #eef2f7; border-radius: 7px; }
 QStatusBar { color: #5f6875; }
 QToolTip { background: #1f2937; color: #ffffff; border: none; padding: 4px; }
 QMenuBar::item:selected { background: #e2e8f0; }
@@ -205,6 +214,15 @@ QGroupBox {
     margin-top: 10px; padding-top: 8px; font-weight: 600;
 }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; color: #9aa4b2; }
+QFrame#CollapsibleSection {
+    border: 1px solid #343b45; border-radius: 8px;
+    background: transparent;
+}
+QToolButton#CollapsibleHeader {
+    border: none; background: transparent; text-align: left;
+    padding: 6px 8px; color: #9aa4b2; font-weight: 600;
+}
+QToolButton#CollapsibleHeader:hover { background: #232a33; border-radius: 7px; }
 QStatusBar { color: #9aa4b2; }
 QToolTip { background: #f9fafb; color: #111827; border: none; padding: 4px; }
 QMenuBar::item:selected { background: #2b313a; }

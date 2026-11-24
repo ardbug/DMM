@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFrame,
-    QGroupBox,
     QLabel,
     QPushButton,
     QSlider,
@@ -20,6 +19,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from app.ui.widgets.collapsible import CollapsibleSection
 
 
 class ToolPanel(QFrame):
@@ -30,6 +31,16 @@ class ToolPanel(QFrame):
     average_changed = Signal()
     floating_toggle_requested = Signal()
     floating_options_changed = Signal()
+
+    def add_section(self, title: str) -> CollapsibleSection:
+        """新增工具区；以后加的工具区也统一使用可折叠容器。"""
+        section = CollapsibleSection(title, self)
+        index = self._root_layout.count()
+        if index > 0 and self._root_layout.itemAt(index - 1).spacerItem():
+            index -= 1
+        self._root_layout.insertWidget(index, section)
+        self.sections.append(section)
+        return section
 
     def __init__(
         self,
@@ -51,14 +62,15 @@ class ToolPanel(QFrame):
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 14, 12, 12)
         root.setSpacing(10)
+        self._root_layout = root
+        self.sections: list[CollapsibleSection] = []
 
         title = QLabel("工具栏", self)
         title.setObjectName("SectionTitle")
         root.addWidget(title)
 
-        csv_group = QGroupBox("数据记录", self)
-        csv_layout = QVBoxLayout(csv_group)
-        csv_layout.setContentsMargins(12, 14, 12, 12)
+        csv_group = self.add_section("数据记录")
+        csv_layout = csv_group.body_layout
         csv_layout.setSpacing(8)
         self.csv_btn = QPushButton("开始记录 CSV", csv_group)
         self.csv_btn.setObjectName("RecordButton")
@@ -78,11 +90,9 @@ class ToolPanel(QFrame):
         csv_layout.addWidget(self.csv_timer_label)
         csv_layout.addWidget(self.csv_path_label)
         csv_layout.addWidget(self.folder_btn)
-        root.addWidget(csv_group)
 
-        avg_group = QGroupBox("平均值", self)
-        avg_layout = QVBoxLayout(avg_group)
-        avg_layout.setContentsMargins(12, 14, 12, 12)
+        avg_group = self.add_section("平均值")
+        avg_layout = avg_group.body_layout
         avg_layout.setSpacing(7)
         self.avg_check = QPushButton("开启平均值", avg_group)
         self.avg_check.setObjectName("AverageButton")
@@ -106,9 +116,8 @@ class ToolPanel(QFrame):
         avg_layout.addWidget(decimals_label)
         avg_layout.addWidget(self.avg_decimals_combo)
 
-        float_group = QGroupBox("悬浮窗", self)
-        float_layout = QVBoxLayout(float_group)
-        float_layout.setContentsMargins(12, 14, 12, 12)
+        float_group = self.add_section("悬浮窗")
+        float_layout = float_group.body_layout
         float_layout.setSpacing(7)
         self.floating_btn = QPushButton("开启悬浮窗", float_group)
         self.floating_btn.setObjectName("FloatingButton")
@@ -141,12 +150,9 @@ class ToolPanel(QFrame):
         float_layout.addWidget(opacity_label)
         float_layout.addWidget(self.floating_opacity_spin)
         float_layout.addWidget(self.floating_minimize_check)
-        root.addWidget(float_group)
-        root.addWidget(avg_group)
 
-        self.beep_group = QGroupBox("2WΩ 软件蜂鸣", self)
-        beep_layout = QVBoxLayout(self.beep_group)
-        beep_layout.setContentsMargins(12, 14, 12, 12)
+        self.beep_group = self.add_section("2WΩ 软件蜂鸣")
+        beep_layout = self.beep_group.body_layout
         beep_layout.setSpacing(7)
         self.beep_check = QCheckBox("小于阈值时蜂鸣", self.beep_group)
         self.beep_threshold_spin = QDoubleSpinBox(self.beep_group)
@@ -175,7 +181,11 @@ class ToolPanel(QFrame):
         self.beep_test_btn.clicked.connect(self.test_beep_requested)
         beep_layout.addWidget(self.beep_test_btn)
         beep_layout.addWidget(hint)
-        root.addWidget(self.beep_group)
+        # 保持“数据记录 / 悬浮窗 / 平均值 / 蜂鸣”的固定顺序。
+        root.removeWidget(float_group)
+        root.insertWidget(2, float_group)
+        self.sections.remove(float_group)
+        self.sections.insert(1, float_group)
         root.addStretch(1)
 
         self.beep_check.toggled.connect(self._emit_beeper)
