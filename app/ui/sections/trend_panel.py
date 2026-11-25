@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSpinBox,
+    QTabBar,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -71,13 +72,13 @@ class TrendPanel(QFrame):
         root.setSpacing(8)
 
         header = QHBoxLayout()
-        self.title_label = QLabel("实时趋势", self)
-        self.title_label.setObjectName("SectionTitle")
-        header.addWidget(self.title_label)
-        self.view_btn = QPushButton("记录列表", self)
-        self.view_btn.setCheckable(True)
-        self.view_btn.setToolTip("切换趋势图 / 记录列表")
-        header.addWidget(self.view_btn)
+        self.view_tabs = QTabBar(self)
+        self.view_tabs.setObjectName("qt_tabwidget_tabbar")
+        self.view_tabs.setDocumentMode(True)
+        self.view_tabs.setExpanding(False)
+        self.view_tabs.addTab("实时趋势")
+        self.view_tabs.addTab("记录列表")
+        header.addWidget(self.view_tabs)
         header.addStretch(1)
 
         self.window_combo = ThemedComboBox(self)
@@ -215,19 +216,18 @@ class TrendPanel(QFrame):
         self.clear_btn.clicked.connect(self._on_clear_clicked)
         self.save_btn.clicked.connect(self._on_save_clicked)
         self.chart.selection_stats.connect(self._on_selection_stats)
-        self.view_btn.toggled.connect(self._on_view_toggled)
+        self.view_tabs.currentChanged.connect(self._on_view_changed)
         self.chart.set_px_mode(self.window_combo.currentData() == "px")
 
     @property
     def record_view_active(self) -> bool:
-        return self.view_btn.isChecked()
+        return self.view_tabs.currentIndex() == 1
 
-    def _on_view_toggled(self, record_view: bool) -> None:
+    def _on_view_changed(self, index: int) -> None:
+        record_view = index == 1
         self.view_stack.setCurrentWidget(
             self.record_page if record_view else self.chart
         )
-        self.title_label.setText("记录列表" if record_view else "实时趋势")
-        self.view_btn.setText("趋势图" if record_view else "记录列表")
         for widget in (
             self.window_combo,
             self.ovld_check,
