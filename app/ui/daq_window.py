@@ -203,6 +203,7 @@ class DaqWindow(QMainWindow):
         self.single_trend.record_requested.connect(self._record_single_trend)
         self.output_tabs = QTabWidget(center)
         self.output_tabs.addTab(self.trend_tab, "趋势")
+        self.output_tabs.addTab(self.single_trend.record_page, "记录列表")
         self.scan_table = QTableWidget(0, 5, self.output_tabs)
         self.scan_table.setHorizontalHeaderLabels(
             ["通道", "功能", "读数", "单位", "时间"]
@@ -215,6 +216,7 @@ class DaqWindow(QMainWindow):
             QHeaderView.ResizeMode.Stretch
         )
         self.output_tabs.addTab(self.scan_table, "扫描表")
+        self.output_tabs.currentChanged.connect(self._on_output_tab_changed)
         center.addWidget(self.readout)
         center.addWidget(self.output_tabs)
         center.setStretchFactor(0, 35)
@@ -596,6 +598,11 @@ class DaqWindow(QMainWindow):
         self.scan_table.setRowCount(0)
         self._scan_rows.clear()
         self._select_trend_page(config)
+
+    def _on_output_tab_changed(self, index: int) -> None:
+        self.single_trend.set_record_view(
+            self.output_tabs.widget(index) is self.single_trend.record_page
+        )
 
     def _select_trend_page(self, config: DaqConfig) -> None:
         # 单通道和多通道都使用 34401A 的 TrendPanel；扫描只是多叠几条线。

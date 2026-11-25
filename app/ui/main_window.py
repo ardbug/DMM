@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QSplitter,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -148,7 +149,11 @@ class MainWindow(QMainWindow):
 
         center = QSplitter(Qt.Orientation.Vertical, central)
         center.addWidget(self.readout_panel)
-        center.addWidget(self.trend_panel)
+        self.trend_tabs = QTabWidget(center)
+        self.trend_tabs.addTab(self.trend_panel, "趋势")
+        self.trend_tabs.addTab(self.trend_panel.record_page, "记录列表")
+        self.trend_tabs.currentChanged.connect(self._on_trend_tab_changed)
+        center.addWidget(self.trend_tabs)
         center.setStretchFactor(0, 38)
         center.setStretchFactor(1, 62)
         center.setSizes([360, 520])
@@ -908,6 +913,9 @@ class MainWindow(QMainWindow):
     def _request_single_read(self) -> None:
         if self._state == "ready":
             self.controller.single_read()
+
+    def _on_trend_tab_changed(self, index: int) -> None:
+        self.trend_panel.set_record_view(index == 1)
 
     def _clear_data(self) -> None:
         self.controller.clear_data()

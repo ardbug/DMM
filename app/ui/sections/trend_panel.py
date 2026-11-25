@@ -17,8 +17,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSpinBox,
-    QTabBar,
-    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -72,13 +70,6 @@ class TrendPanel(QFrame):
         root.setSpacing(8)
 
         header = QHBoxLayout()
-        self.view_tabs = QTabBar(self)
-        self.view_tabs.setObjectName("qt_tabwidget_tabbar")
-        self.view_tabs.setDocumentMode(True)
-        self.view_tabs.setExpanding(False)
-        self.view_tabs.addTab("实时趋势")
-        self.view_tabs.addTab("记录列表")
-        header.addWidget(self.view_tabs)
         header.addStretch(1)
 
         self.window_combo = ThemedComboBox(self)
@@ -174,8 +165,6 @@ class TrendPanel(QFrame):
         root.addWidget(self.data_panel)
 
         self.chart = TrendChart(RingBuffer(200_000), self)
-        self.view_stack = QStackedWidget(self)
-        self.view_stack.addWidget(self.chart)
 
         self.record_page = QWidget(self)
         record_layout = QVBoxLayout(self.record_page)
@@ -206,8 +195,7 @@ class TrendPanel(QFrame):
         self.record_btn.setToolTip("回车键：记录当前值")
         self.record_btn.clicked.connect(self.record_requested)
         record_layout.addWidget(self.record_btn)
-        self.view_stack.addWidget(self.record_page)
-        root.addWidget(self.view_stack, 1)
+        root.addWidget(self.chart, 1)
         self.set_record_limit(self._record_limit)
 
         self.window_combo.currentIndexChanged.connect(self._on_window_changed)
@@ -216,18 +204,15 @@ class TrendPanel(QFrame):
         self.clear_btn.clicked.connect(self._on_clear_clicked)
         self.save_btn.clicked.connect(self._on_save_clicked)
         self.chart.selection_stats.connect(self._on_selection_stats)
-        self.view_tabs.currentChanged.connect(self._on_view_changed)
+        self._record_view_active = False
         self.chart.set_px_mode(self.window_combo.currentData() == "px")
 
     @property
     def record_view_active(self) -> bool:
-        return self.view_tabs.currentIndex() == 1
+        return self._record_view_active
 
-    def _on_view_changed(self, index: int) -> None:
-        record_view = index == 1
-        self.view_stack.setCurrentWidget(
-            self.record_page if record_view else self.chart
-        )
+    def set_record_view(self, active: bool) -> None:
+        self._record_view_active = bool(active)
         for widget in (
             self.window_combo,
             self.ovld_check,
