@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QComboBox,
+    QSpinBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -127,6 +128,14 @@ class SerialDialog(QDialog):
         self.serial_labels.append(form.labelForField(self.flow))
         self.serial_widgets.append(self.flow)
 
+        self.timeout = QSpinBox(self)
+        self.timeout.setRange(500, 120000)
+        self.timeout.setSingleStep(500)
+        self.timeout.setSuffix(" ms")
+        self.timeout.setValue(max(500, min(120000, settings.timeout_ms)))
+        self.timeout.setToolTip("单次 I/O 读取/写入的最长等待时间")
+        form.addRow("超时", self.timeout)
+
         self.serial_hint = QLabel(
             "34401A 串口默认 9600 / Even / 7 / 2", self
         )
@@ -220,6 +229,6 @@ class SerialDialog(QDialog):
             parity=str(self.parity.currentData()),
             stop_bits=int(self.stop_bits.currentData()),
             flow_control=str(self.flow.currentData()),
-            timeout_ms=2000,
+            timeout_ms=int(self.timeout.value()),
             interface=interface,
         )

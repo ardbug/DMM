@@ -32,8 +32,13 @@ class DaqWorker(QThread):
         self._acquiring = False
         self._shutdown = False
         self._read_recovered = False
+        self._opening = False
+        self._cancel_open = False
+        self._read_timeout_ms = 15000
 
     def submit(self, kind: str, payload=None) -> None:
+        if kind == "close" and self._opening:
+            self._cancel_open = True
         self._commands.put((kind, payload))
 
     def run(self) -> None:
@@ -87,8 +92,33 @@ class DaqWorker(QThread):
             settings: SerialSettings = payload
             io = SiclGpibIO() if settings.interface == "gpib" else VisaIO()
             device = Daq34970A(io)
+            self._opening = True
+            self._read_timeout_ms = max(1000, int(settings.timeout_ms))
             self._set_state("opening", f"正在打开 {settings.resource}…")
-            device.open(settings)
+            try:
+                device.open(settings)
+            except Exception:
+                self._opening = False
+                if self._cancel_open:
+                    self._cancel_open = False
+                    try:
+                        device.close()
+                    except Exception:
+                        pass
+                    self._set_state("disconnected", "已取消打开")
+                    return
+                raise
+            self._opening = False
+            if self._cancel_open:
+                self._cancel_open = False
+                try:
+                    device.close()
+                except Exception:
+                    pass
+                self._device = None
+                self._config = None
+                self._set_state("disconnected", "已取消打开")
+                return
             self._device = device
             self._config = None
             self.identity_ready.emit(device.identity)
@@ -191,14 +221,14 @@ class DaqWorker(QThread):
                 for _ in range(max(1, int(self._config.scan_count))):
                     if not self._acquiring:
                         break
-                    samples = self._device.read_scan(15000)
+                    samples = self._device.read_scan(self._read_timeout_ms)
                     self.scan_received.emit(samples)
                     if samples:
                         self.reading_received.emit(samples[-1][1])
                     self._wait_seconds(self._config.post_scan_wait)
                 return
             reading = self._device.read(
-                15000,
+                self._read_timeout_ms,
                 self._config.channel if self._config else 1,
             )
             reading = reading.__class__(

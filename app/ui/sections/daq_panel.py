@@ -64,9 +64,7 @@ class DaqConnectionPanel(QFrame):
         self._config = config
         self._state = "disconnected"
         if config.has_connection_settings():
-            self._settings = replace(
-                config.serial_settings(), timeout_ms=5000
-            )
+            self._settings = config.serial_settings()
         else:
             self._settings = SerialSettings(
                 resource="gpib0,9",
@@ -164,7 +162,6 @@ class DaqConnectionPanel(QFrame):
             self._settings,
             resource=self.resource.currentText().strip() or "gpib0,9",
             interface=str(self.interface.currentData()),
-            timeout_ms=5000,
         )
 
     def _edit_settings(self) -> None:

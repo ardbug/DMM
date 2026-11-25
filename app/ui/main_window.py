@@ -396,7 +396,7 @@ class MainWindow(QMainWindow):
             parity=settings.parity,
             stop_bits=settings.stop_bits,
             flow_control=settings.flow_control,
-            timeout_ms=3000,
+            timeout_ms=settings.timeout_ms,
             interface=settings.interface,
         )
         self._auto_open_pending = True
