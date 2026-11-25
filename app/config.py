@@ -238,6 +238,10 @@ class AppConfig:
             "post_scan_wait": _float_value(
                 s.value("daq/post_scan_wait"), 0.0
             ),
+            "min_scan_seconds": _float_value(
+                s.value("daq/min_scan_seconds"), 0.0
+            ),
+            "channels": _json_list(s.value("daq/channels", "[]")),
         }
 
     def save_daq_parameters(self, parameters: dict[str, object]) -> None:
@@ -255,9 +259,15 @@ class AppConfig:
             "scan_count",
             "pre_scan_wait",
             "post_scan_wait",
+            "min_scan_seconds",
         ):
             if key in parameters:
                 s.setValue(f"daq/{key}", parameters[key])
+        if "channels" in parameters:
+            s.setValue(
+                "daq/channels",
+                json.dumps(parameters["channels"], ensure_ascii=False),
+            )
         s.sync()
 
     def floating_settings(self) -> tuple[int, int]:
@@ -329,6 +339,14 @@ def _float_value(value: object, fallback: float) -> float:
         return float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return fallback
+
+
+def _json_list(value: object) -> list:
+    try:
+        data = json.loads(str(value))
+    except (TypeError, ValueError):
+        return []
+    return data if isinstance(data, list) else []
 
 
 def _bool_value(value: object, fallback: bool) -> bool:

@@ -45,7 +45,7 @@ def test_daq_window_builds_with_gpib_default(tmp_path) -> None:
     ])
     assert window.params.channel.minimum() == 101
     assert window.params.channel.maximum() == 122
-    assert window.params.scan_list.count() == 22
+    assert window.params.scan_table.rowCount() == 22
     window.single_trend.set_record_view(True)
     assert window.single_trend.record_view_active is True
     window.single_trend.set_record_view(False)
@@ -62,16 +62,23 @@ def test_daq_parameters_are_persisted(tmp_path) -> None:
     window.params.nplc.setCurrentIndex(
         window.params.nplc.findData(10.0)
     )
-    window.params.scan_rate.setValue(2.5)
+    window.params.scan_check.setChecked(True)
+    window.params.scan_nplc.setCurrentIndex(
+        window.params.scan_nplc.findData(10.0)
+    )
+    window.params.scan_table.selectRow(0)
     window.params.scan_count.setValue(3)
     window.params.pre_scan_wait.setValue(0.2)
     window.params.post_scan_wait.setValue(0.1)
+    window.params.min_scan_seconds.setValue(0.5)
     window.close()
 
     loaded = AppConfig(path, instance=1).daq_parameters()
-    assert loaded["channel"] == 102
+    assert loaded["scan"] is True
     assert loaded["nplc"] == 10.0
-    assert loaded["scan_rate"] == 2.5
     assert loaded["scan_count"] == 3
     assert loaded["pre_scan_wait"] == 0.2
     assert loaded["post_scan_wait"] == 0.1
+    assert loaded["min_scan_seconds"] == 0.5
+    assert loaded["channels"][0]["channel"] == 101
+    assert loaded["channels"][0]["count"] == 3

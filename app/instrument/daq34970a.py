@@ -9,7 +9,11 @@ from dataclasses import dataclass, replace
 from app.constants import OVLD_THRESHOLD
 from app.domain.models import InstrumentStatus, Reading, SerialSettings
 from app.domain.functions import FunctionInfo
-from app.instrument.daq_modules import SlotInfo, parse_slot
+from app.instrument.daq_modules import (
+    ScanChannelConfig,
+    SlotInfo,
+    parse_slot,
+)
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +59,8 @@ class DaqConfig:
     scan_count: int = 1
     pre_scan_wait: float = 0.0
     post_scan_wait: float = 0.0
+    min_scan_seconds: float = 0.0
+    channels: tuple[ScanChannelConfig, ...] = ()
 
 
 def parse_channels(
@@ -117,6 +123,7 @@ class Daq34970A:
         self.status: InstrumentStatus | None = None
         self.slots: list[SlotInfo] = []
         self.current_channels: set[int] = set()
+        self._scan_functions: dict[int, FunctionInfo] = {}
 
     @property
     def is_open(self) -> bool:
@@ -227,38 +234,67 @@ class Daq34970A:
             config.scan_list, self.allowed_channels()
         )
         current_set = self.current_channels or {121, 122}
-        current = [ch for ch in channels if ch in current_set]
-        if current and len(current) != len(channels):
-            raise ValueError("扫描列表不能混用电流通道和复用通道")
-        if current and config.function not in {"CURR:DC", "CURR:AC"}:
-            raise ValueError("电流通道只能扫描电流")
-        channel_spec = _format_channels(channels)
-        if config.function == "TEMP":
-            conf = _TEMP_CONF.get(config.temperature, "CONF:TEMP TC,K")
-            self._io.write_line(f"{conf},(@{channel_spec})")
-            if config.temperature.endswith(":1000"):
-                if config.temperature.startswith("RTD:4W"):
-                    self._io.write_line(
-                        f"SENS:TEMP:TRAN:FRTD:RES 1000,(@{channel_spec})"
-                    )
-                else:
-                    self._io.write_line(
-                        f"SENS:TEMP:TRAN:RTD:RES 1000,(@{channel_spec})"
-                    )
-            self._io.write_line(f"UNIT:TEMP {config.temp_unit},(@{channel_spec})")
-            self._io.write_line(
-                f"SENS:TEMP:NPLC {config.nplc:g},(@{channel_spec})"
-            )
-            info = _FUNCTIONS["TEMP"]
-        else:
-            self._io.write_line(f"CONF:{config.function} (@{channel_spec})")
-            if config.function not in {"FREQ", "PER"}:
-                self._io.write_line(
-                    f"SENS:{config.function}:NPLC {config.nplc:g},(@{channel_spec})"
+        specs = [
+            spec for spec in config.channels if spec.channel in channels
+        ]
+        if not specs:
+            specs = [
+                ScanChannelConfig(
+                    channel, config.function, config.scan_count
                 )
-            info = _FUNCTIONS.get(config.function, _FUNCTIONS["VOLT:DC"])
+                for channel in channels
+            ]
+        current = [spec.channel for spec in specs if spec.channel in current_set]
+        if current and len(current) != len(specs):
+            raise ValueError("扫描列表不能混用电流通道和复用通道")
+        if current and any(
+            spec.function not in {"CURR:DC", "CURR:AC"} for spec in specs
+        ):
+            raise ValueError("电流通道只能扫描电流")
+        groups: dict[str, list[int]] = {}
+        for spec in specs:
+            groups.setdefault(spec.function, []).append(spec.channel)
+        scan_functions: dict[int, FunctionInfo] = {}
+        for function, group_channels in groups.items():
+            channel_spec = _format_channels(group_channels)
+            if function == "TEMP":
+                conf = _TEMP_CONF.get(
+                    config.temperature, "CONF:TEMP TC,K"
+                )
+                self._io.write_line(f"{conf},(@{channel_spec})")
+                if config.temperature.endswith(":1000"):
+                    if config.temperature.startswith("RTD:4W"):
+                        self._io.write_line(
+                            f"SENS:TEMP:TRAN:FRTD:RES 1000,(@{channel_spec})"
+                        )
+                    else:
+                        self._io.write_line(
+                            f"SENS:TEMP:TRAN:RTD:RES 1000,(@{channel_spec})"
+                        )
+                self._io.write_line(
+                    f"UNIT:TEMP {config.temp_unit},(@{channel_spec})"
+                )
+                self._io.write_line(
+                    f"SENS:TEMP:NPLC {config.nplc:g},(@{channel_spec})"
+                )
+                info = _FUNCTIONS["TEMP"]
+            else:
+                self._io.write_line(
+                    f"CONF:{function} (@{channel_spec})"
+                )
+                if function not in {"FREQ", "PER"}:
+                    self._io.write_line(
+                        f"SENS:{function}:NPLC "
+                        f"{config.nplc:g},(@{channel_spec})"
+                    )
+                info = _FUNCTIONS.get(function, _FUNCTIONS["VOLT:DC"])
+            for channel in group_channels:
+                scan_functions[channel] = info
+        channel_spec = _format_channels(channels)
         self._io.write_line(f"ROUT:SCAN (@{channel_spec})")
         self._scan_spec = channel_spec
+        self._scan_functions = scan_functions
+        info = next(iter(scan_functions.values()), _FUNCTIONS["VOLT:DC"])
         self.status = InstrumentStatus(
             function=info,
             nplc=f"{config.nplc:g}",
@@ -284,10 +320,11 @@ class Daq34970A:
             raise RuntimeError(
                 f"34970A 扫描条数不符：期望 {len(channels)}，实际 {len(tokens)}"
             )
-        info = self.status.function if self.status else _FUNCTIONS["VOLT:DC"]
+        fallback = self.status.function if self.status else _FUNCTIONS["VOLT:DC"]
         stamp = time.time_ns()
         result: list[tuple[int, Reading]] = []
         for channel, token in zip(channels, tokens, strict=True):
+            info = self._scan_functions.get(channel, fallback)
             try:
                 value = float(token)
             except ValueError as exc:
@@ -347,16 +384,33 @@ class Daq34970A:
 
     def set_nplc(self, config: DaqConfig) -> None:
         """只更新积分时间，不重发 CONF/ROUT:SCAN，避免量程/通道继电器动作。"""
-        if config.function in {"FREQ", "PER"}:
-            return
         if config.scan:
-            channels = _format_channels(parse_channels(config.scan_list))
+            if config.channels:
+                groups: dict[str, list[int]] = {}
+                for spec in config.channels:
+                    if spec.function not in {"FREQ", "PER"}:
+                        groups.setdefault(spec.function, []).append(spec.channel)
+                for function, channels in groups.items():
+                    sensor = "TEMP" if function == "TEMP" else function
+                    self._io.write_line(
+                        f"SENS:{sensor}:NPLC {config.nplc:g},"
+                        f"(@{_format_channels(channels)})"
+                    )
+            else:
+                if config.function in {"FREQ", "PER"}:
+                    return
+                sensor = "TEMP" if config.function == "TEMP" else config.function
+                self._io.write_line(
+                    f"SENS:{sensor}:NPLC {config.nplc:g},"
+                    f"(@{_format_channels(parse_channels(config.scan_list))})"
+                )
         else:
-            channels = str(int(config.channel))
-        sensor = "TEMP" if config.function == "TEMP" else config.function
-        self._io.write_line(
-            f"SENS:{sensor}:NPLC {config.nplc:g},(@{channels})"
-        )
+            if config.function in {"FREQ", "PER"}:
+                return
+            sensor = "TEMP" if config.function == "TEMP" else config.function
+            self._io.write_line(
+                f"SENS:{sensor}:NPLC {config.nplc:g},(@{int(config.channel)})"
+            )
         if self.status is not None:
             self.status = replace(self.status, nplc=f"{config.nplc:g}")
 

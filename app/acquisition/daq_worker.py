@@ -7,7 +7,8 @@ import time
 
 from PySide6.QtCore import QThread, Signal
 
-from app.instrument.daq34970a import Daq34970A, DaqConfig
+from app.instrument.daq34970a import Daq34970A, DaqConfig, parse_channels
+from app.instrument.daq_modules import ScanChannelConfig
 from app.domain.models import SerialSettings
 from app.transport.sicl_gpib import SiclGpibIO
 from app.transport.visa_io import VisaIO
@@ -209,6 +210,10 @@ class DaqWorker(QThread):
             a.temp_unit,
             a.scan,
             a.scan_list,
+            tuple(
+                (spec.channel, spec.function)
+                for spec in a.channels
+            ),
         ) == (
             b.channel,
             b.function,
@@ -217,6 +222,10 @@ class DaqWorker(QThread):
             b.temp_unit,
             b.scan,
             b.scan_list,
+            tuple(
+                (spec.channel, spec.function)
+                for spec in b.channels
+            ),
         )
 
     def _read_once(self) -> None:
@@ -224,15 +233,48 @@ class DaqWorker(QThread):
         self.read_activity.emit(True)
         try:
             if self._config is not None and self._config.scan:
+                specs = list(self._config.channels)
+                if not specs:
+                    specs = [
+                        ScanChannelConfig(
+                            channel,
+                            self._config.function,
+                            max(1, int(self._config.scan_count)),
+                        )
+                        for channel in parse_channels(self._config.scan_list)
+                    ]
+                targets = {
+                    spec.channel: max(1, int(spec.count))
+                    for spec in specs
+                }
+                sent = {channel: 0 for channel in targets}
+                started = time.monotonic()
                 self._wait_seconds(self._config.pre_scan_wait)
-                for _ in range(max(1, int(self._config.scan_count))):
+                for _ in range(max(targets.values(), default=1)):
                     if not self._acquiring:
                         break
                     samples = self._device.read_scan(self._read_timeout_ms)
-                    self.scan_received.emit(samples)
-                    if samples:
-                        self.reading_received.emit(samples[-1][1])
+                    remaining = [
+                        (channel, reading)
+                        for channel, reading in samples
+                        if sent.get(channel, 0) < targets.get(channel, 1)
+                    ]
+                    for channel, _reading in remaining:
+                        sent[channel] = sent.get(channel, 0) + 1
+                    if remaining:
+                        self.scan_received.emit(remaining)
+                        self.reading_received.emit(remaining[-1][1])
+                    if all(
+                        sent.get(channel, 0) >= target
+                        for channel, target in targets.items()
+                    ):
+                        break
                     self._wait_seconds(self._config.post_scan_wait)
+                elapsed = time.monotonic() - started
+                if self._config.min_scan_seconds > elapsed:
+                    self._wait_seconds(
+                        self._config.min_scan_seconds - elapsed
+                    )
                 return
             reading = self._device.read(
                 self._read_timeout_ms,

@@ -6,6 +6,13 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
+class ScanChannelConfig:
+    channel: int
+    function: str = "VOLT:DC"
+    count: int = 1
+
+
+@dataclass(frozen=True, slots=True)
 class SlotInfo:
     slot: int
     model: str
