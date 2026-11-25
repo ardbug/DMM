@@ -54,9 +54,15 @@ def test_daq_parameters_are_persisted(tmp_path) -> None:
         window.params.nplc.findData(10.0)
     )
     window.params.scan_rate.setValue(2.5)
+    window.params.scan_count.setValue(3)
+    window.params.pre_scan_wait.setValue(0.2)
+    window.params.post_scan_wait.setValue(0.1)
     window.close()
 
     loaded = AppConfig(path, instance=1).daq_parameters()
     assert loaded["channel"] == 102
     assert loaded["nplc"] == 10.0
     assert loaded["scan_rate"] == 2.5
+    assert loaded["scan_count"] == 3
+    assert loaded["pre_scan_wait"] == 0.2
+    assert loaded["post_scan_wait"] == 0.1

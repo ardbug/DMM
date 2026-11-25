@@ -187,10 +187,15 @@ class DaqWorker(QThread):
         self.read_activity.emit(True)
         try:
             if self._config is not None and self._config.scan:
-                samples = self._device.read_scan(15000)
-                self.scan_received.emit(samples)
-                if samples:
-                    self.reading_received.emit(samples[-1][1])
+                self._wait_seconds(self._config.pre_scan_wait)
+                for _ in range(max(1, int(self._config.scan_count))):
+                    if not self._acquiring:
+                        break
+                    samples = self._device.read_scan(15000)
+                    self.scan_received.emit(samples)
+                    if samples:
+                        self.reading_received.emit(samples[-1][1])
+                    self._wait_seconds(self._config.post_scan_wait)
                 return
             reading = self._device.read(
                 15000,
@@ -218,6 +223,11 @@ class DaqWorker(QThread):
             self._set_error_state(str(exc))
         finally:
             self.read_activity.emit(False)
+
+    def _wait_seconds(self, seconds: float) -> None:
+        end = time.monotonic() + max(0.0, float(seconds))
+        while self._acquiring and time.monotonic() < end:
+            time.sleep(min(0.05, max(0.0, end - time.monotonic())))
 
     def _recover_read_failure(self) -> bool:
         if self._read_recovered or self._device is None:

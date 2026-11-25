@@ -231,6 +231,13 @@ class AppConfig:
             "scan": _bool_value(s.value("daq/scan"), False),
             "scan_list": str(s.value("daq/scan_list", "101:110")),
             "scan_rate": _float_value(s.value("daq/scan_rate"), 1.0),
+            "scan_count": _int_value(s.value("daq/scan_count"), 1),
+            "pre_scan_wait": _float_value(
+                s.value("daq/pre_scan_wait"), 0.0
+            ),
+            "post_scan_wait": _float_value(
+                s.value("daq/post_scan_wait"), 0.0
+            ),
         }
 
     def save_daq_parameters(self, parameters: dict[str, object]) -> None:
@@ -245,6 +252,9 @@ class AppConfig:
             "scan",
             "scan_list",
             "scan_rate",
+            "scan_count",
+            "pre_scan_wait",
+            "post_scan_wait",
         ):
             if key in parameters:
                 s.setValue(f"daq/{key}", parameters[key])

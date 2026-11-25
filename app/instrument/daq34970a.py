@@ -51,6 +51,9 @@ class DaqConfig:
     scan: bool = False
     scan_list: str = ""
     scan_rate: float = 1.0
+    scan_count: int = 1
+    pre_scan_wait: float = 0.0
+    post_scan_wait: float = 0.0
 
 
 def parse_channels(spec: str) -> list[int]:

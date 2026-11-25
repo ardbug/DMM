@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QFrame,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -286,6 +287,23 @@ class DaqParamsPanel(QFrame):
         self.scan_rate.setValue(1.0)
         self.scan_rate.setSuffix(" 次/秒")
         self.scan_rate.setToolTip("每秒扫描轮数，1 次/秒表示每秒扫描一次")
+        self.scan_count = QSpinBox(self)
+        self.scan_count.setRange(1, 50000)
+        self.scan_count.setValue(1)
+        self.scan_count.setSuffix(" 次")
+        self.scan_count.setToolTip("每个通道在一次扫描事件中测量几次")
+        self.pre_scan_wait = QDoubleSpinBox(self)
+        self.pre_scan_wait.setRange(0.0, 3600.0)
+        self.pre_scan_wait.setDecimals(3)
+        self.pre_scan_wait.setSuffix(" s")
+        self.pre_scan_wait.setValue(0.0)
+        self.pre_scan_wait.setToolTip("每次扫描开始前等待的时间，用于继电器稳定")
+        self.post_scan_wait = QDoubleSpinBox(self)
+        self.post_scan_wait.setRange(0.0, 3600.0)
+        self.post_scan_wait.setDecimals(3)
+        self.post_scan_wait.setSuffix(" s")
+        self.post_scan_wait.setValue(0.0)
+        self.post_scan_wait.setToolTip("每次扫描结束后等待的时间")
 
         form.addRow("通道", self.channel)
         form.addRow("", self.scan_check)
@@ -303,6 +321,20 @@ class DaqParamsPanel(QFrame):
         self._scan_rate_label = form.labelForField(self.scan_rate)
         root.addLayout(form)
 
+        self.scan_settings = QGroupBox("扫描设置", self)
+        scan_settings_form = QFormLayout(self.scan_settings)
+        scan_settings_form.setSpacing(6)
+        scan_settings_form.addRow(
+            "每通道扫描次数", self.scan_count
+        )
+        scan_settings_form.addRow(
+            "扫描前等待", self.pre_scan_wait
+        )
+        scan_settings_form.addRow(
+            "扫描后等待", self.post_scan_wait
+        )
+        root.addWidget(self.scan_settings)
+
         root.addStretch(1)
 
         self._load_saved_parameters()
@@ -316,6 +348,9 @@ class DaqParamsPanel(QFrame):
         self.nplc.currentIndexChanged.connect(self._persist_parameters)
         self.rate.valueChanged.connect(self._persist_parameters)
         self.scan_rate.valueChanged.connect(self._persist_parameters)
+        self.scan_count.valueChanged.connect(self._persist_parameters)
+        self.pre_scan_wait.valueChanged.connect(self._persist_parameters)
+        self.post_scan_wait.valueChanged.connect(self._persist_parameters)
         self.channel.valueChanged.connect(self._persist_parameters)
         self.scan_check.toggled.connect(self._persist_parameters)
         self._sync_scan()
@@ -343,6 +378,9 @@ class DaqParamsPanel(QFrame):
             self.temp_unit.setCurrentIndex(unit_index)
         self.rate.setValue(float(values["rate"]))
         self.scan_rate.setValue(float(values["scan_rate"]))
+        self.scan_count.setValue(int(values["scan_count"]))
+        self.pre_scan_wait.setValue(float(values["pre_scan_wait"]))
+        self.post_scan_wait.setValue(float(values["post_scan_wait"]))
         self.scan_check.setChecked(bool(values["scan"]))
         try:
             selected = set(parse_channels(str(values["scan_list"])))
@@ -371,6 +409,9 @@ class DaqParamsPanel(QFrame):
                     "scan": config.scan,
                     "scan_list": config.scan_list,
                     "scan_rate": config.scan_rate,
+                    "scan_count": config.scan_count,
+                    "pre_scan_wait": config.pre_scan_wait,
+                    "post_scan_wait": config.post_scan_wait,
                 }
             )
         self.config_changed.emit()
@@ -384,6 +425,7 @@ class DaqParamsPanel(QFrame):
         self._rate_label.setVisible(not scan)
         self._scan_rate_label.setVisible(scan)
         self.scan_rate.setVisible(scan)
+        self.scan_settings.setVisible(scan)
 
     def _sync_function(self) -> None:
         temp = self.function.currentData() == "TEMP"
@@ -444,6 +486,9 @@ class DaqParamsPanel(QFrame):
             scan=self.scan_check.isChecked(),
             scan_list=self._scan_channels(),
             scan_rate=float(self.scan_rate.value()),
+            scan_count=int(self.scan_count.value()),
+            pre_scan_wait=float(self.pre_scan_wait.value()),
+            post_scan_wait=float(self.post_scan_wait.value()),
         )
 
     def selected_channel_count(self) -> int:
