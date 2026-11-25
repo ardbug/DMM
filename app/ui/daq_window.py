@@ -438,7 +438,10 @@ class DaqWindow(QMainWindow):
         self._scpi_dialog.activateWindow()
 
     def _send_scpi(self, command: str) -> None:
-        if self._state not in {"ready", "acquiring"}:
+        if self._state == "acquiring":
+            self._on_error("SCPI", "请先停止连续读取，再发送终端命令")
+            return
+        if self._state != "ready":
             self._on_error("SCPI", "请先打开 34970A 连接")
             return
         self._worker.submit("scpi", command)

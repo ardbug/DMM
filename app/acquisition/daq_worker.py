@@ -179,6 +179,11 @@ class DaqWorker(QThread):
             if self._device is None:
                 raise RuntimeError("34970A 未打开")
             command = str(payload)
+            if self._acquiring:
+                self.scpi_result.emit(
+                    command, "请先停止连续读取，再发送终端命令"
+                )
+                return
             self.scpi_result.emit(
                 command, self._device.scpi(command)
             )
