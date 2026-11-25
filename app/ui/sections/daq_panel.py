@@ -284,8 +284,8 @@ class DaqParamsPanel(QFrame):
         self.scan_rate.setRange(0.1, 20.0)
         self.scan_rate.setDecimals(2)
         self.scan_rate.setValue(1.0)
-        self.scan_rate.setSuffix(" Hz")
-        self.scan_rate.setToolTip("每轮扫描的间隔，1 Hz 表示每秒扫描一次")
+        self.scan_rate.setSuffix(" 次/秒")
+        self.scan_rate.setToolTip("每秒扫描轮数，1 次/秒表示每秒扫描一次")
 
         form.addRow("通道", self.channel)
         form.addRow("", self.scan_check)
