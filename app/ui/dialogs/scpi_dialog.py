@@ -51,6 +51,18 @@ class ScpiDialog(QDialog):
         row.addWidget(self.clear_btn)
         root.addLayout(row)
 
+        quick = QHBoxLayout()
+        for command in ("*IDN?", "SYST:ERR?", "*CLS"):
+            button = QPushButton(command, self)
+            button.setToolTip(f"直接发送 {command}")
+            button.clicked.connect(
+                lambda _checked=False, cmd=command:
+                self._send_command(cmd)
+            )
+            quick.addWidget(button)
+        quick.addStretch(1)
+        root.addLayout(quick)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
@@ -63,9 +75,15 @@ class ScpiDialog(QDialog):
         text = self.input.text().strip()
         if not text:
             return
+        self.input.clear()
+        self._send_command(text)
+
+    def _send_command(self, text: str) -> None:
+        text = text.strip()
+        if not text:
+            return
         self._history.append(text)
         self._history_index = len(self._history)
-        self.input.clear()
         self.log.appendPlainText(f">>> {text}")
         self.send_requested.emit(text)
 
