@@ -62,6 +62,7 @@ from app.ui.sections.daq_panel import DaqConnectionPanel, DaqParamsPanel
 from app.ui.sections.readout_panel import ReadoutPanel
 from app.ui.sections.trend_panel import TrendPanel
 from app.ui.widgets.multi_trend import MultiChannelTrend
+from app.ui.widgets.widget_inspector import WidgetInspector
 
 
 class DaqWindow(QMainWindow):
@@ -227,6 +228,14 @@ class DaqWindow(QMainWindow):
         self.status_identity = QLabel("", self)
         self.statusBar().addWidget(self.status_state)
         self.statusBar().addPermanentWidget(self.status_identity)
+        self.inspect_label = QLabel("", self)
+        self.inspect_label.setObjectName("Muted")
+        self.inspect_label.setMaximumWidth(720)
+        self.inspect_label.hide()
+        self.statusBar().addPermanentWidget(self.inspect_label)
+        self.widget_inspector = WidgetInspector(
+            self._show_widget_details, self
+        )
 
         file_menu = self.menuBar().addMenu("文件(&F)")
         location_action = QAction("更改 CSV 存储位置...", self)
@@ -309,6 +318,14 @@ class DaqWindow(QMainWindow):
         serial_log_action = QAction("串口日志", self)
         serial_log_action.triggered.connect(self._open_serial_log)
         logs_menu.addAction(serial_log_action)
+        tools_menu.addSeparator()
+        self.inspect_action = QAction("调试：显示控件名称", self)
+        self.inspect_action.setCheckable(True)
+        self.inspect_action.setShortcut(QKeySequence("Ctrl+Shift+I"))
+        self.inspect_action.toggled.connect(
+            self._toggle_widget_inspector
+        )
+        tools_menu.addAction(self.inspect_action)
 
         comm_menu = self.menuBar().addMenu("通信(&C)")
         settings_action = QAction("连接设置...", self)
@@ -419,6 +436,16 @@ class DaqWindow(QMainWindow):
     def _on_scpi_result(self, command: str, response: str) -> None:
         if self._scpi_dialog is not None:
             self._scpi_dialog.append_result(command, response)
+
+    def _show_widget_details(self, text: str) -> None:
+        self.inspect_label.setText(text)
+        self.inspect_label.setToolTip(text)
+
+    def _toggle_widget_inspector(self, enabled: bool) -> None:
+        self.inspect_label.setVisible(enabled)
+        self.widget_inspector.set_enabled(enabled)
+        if not enabled:
+            self.inspect_label.clear()
 
     def _open_error_codes(self) -> None:
         if (
