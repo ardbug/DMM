@@ -182,6 +182,26 @@ class VisaIO:
             raise VisaIOError("串口未打开")
         self._inst.flush(constants.VI_READ_BUF | constants.VI_WRITE_BUF)
 
+    def drain(self) -> None:
+        """用短超时读掉串口里已经排队的迟到响应。"""
+        if self._inst is None:
+            return
+        previous_timeout = self._inst.timeout
+        self._inst.timeout = 200
+        try:
+            for _ in range(32):
+                try:
+                    raw = self._inst.read_raw()
+                except pyvisa.errors.VisaIOError as exc:
+                    if exc.error_code == constants.VI_ERROR_TMO:
+                        break
+                    raise
+                if not raw:
+                    break
+                serial_log.record("RX", raw)
+        finally:
+            self._inst.timeout = previous_timeout
+
     def clear(self) -> None:
         """RS-232 下等价 Ctrl-C / device clear。"""
 

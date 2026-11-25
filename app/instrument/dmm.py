@@ -124,6 +124,12 @@ class Dmm:
         time.sleep(0.2)
 
     def read_status(self) -> InstrumentStatus:
+        drain = getattr(self._io, "drain", None)
+        if drain is not None:
+            try:
+                drain()
+            except Exception:
+                log.debug("FUNC? 前清空串口失败", exc_info=True)
         func_raw = ""
         info = None
         for attempt in range(2):
@@ -183,9 +189,14 @@ class Dmm:
         try:
             self._io.clear()
             self._io.flush()
+            drain = getattr(self._io, "drain", None)
+            if drain is not None:
+                drain()
             self._io.write_line("*CLS")
             time.sleep(0.2)
             self._io.flush()
+            if drain is not None:
+                drain()
         except Exception:
             log.warning("串口失步清理失败", exc_info=True)
 
