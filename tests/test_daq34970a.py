@@ -43,6 +43,20 @@ def test_thermocouple_k_configuration() -> None:
     assert reading.value == 1.25
 
 
+def test_ntc_10k_configuration() -> None:
+    io = FakeIo()
+    device = Daq34970A(io)
+    device.open(SerialSettings(resource="gpib0,9", interface="gpib"))
+    device.configure(
+        DaqConfig(
+            channel=105,
+            function="TEMP",
+            temperature="THERM:10000",
+        )
+    )
+    assert "CONF:TEMP THER,10000,(@105)" in io.writes
+
+
 def test_rtd_2wire_configuration() -> None:
     io = FakeIo()
     device = Daq34970A(io)
