@@ -335,6 +335,8 @@ class ReadoutPanel(QFrame):
         self._display_timer.setInterval(interval)
 
     def set_status(self, status: InstrumentStatus) -> None:
+        if not _valid_function_label(status.function.label):
+            return
         old_label = self._status.function.label if self._status is not None else None
         if old_label is not None and old_label != status.function.label:
             # 功能变了，旧读数不能继续用于量程显示。
@@ -343,8 +345,6 @@ class ReadoutPanel(QFrame):
         self.function_badge.setText(status.function.label)
         spec = function_spec_by_label(status.function.label)
         self.chips["FILT"].set_state(bool(spec and spec.supports_ac_filter))
-        if not _valid_function_label(status.function.label):
-            return
         if self._state in {"ready", "reading", "acquiring", "stopping"}:
             self.chips["Rmt"].set_state(True)
         if self._daq_mode:
@@ -463,6 +463,8 @@ class ReadoutPanel(QFrame):
         )
 
     def _show_reading(self, reading: Reading) -> None:
+        if not _valid_function_label(reading.function_label):
+            return
         self._last_reading = reading
         self._range_reading = reading
         if (
