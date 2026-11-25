@@ -386,6 +386,7 @@ class DaqWindow(QMainWindow):
         self._worker.scpi_result.connect(self._on_scpi_result)
         self._worker.state_changed.connect(self._on_state)
         self._worker.identity_ready.connect(self._on_identity)
+        self._worker.slots_detected.connect(self._on_slots_detected)
         self._worker.status_updated.connect(self.readout.set_status)
         self._worker.error_occurred.connect(self._on_error)
         self._worker.start()
@@ -400,6 +401,10 @@ class DaqWindow(QMainWindow):
             self._close()
         else:
             self._open(self.panel.settings())
+
+    def _on_slots_detected(self, slots) -> None:
+        self.panel.set_slots(slots)
+        self.params.set_slots(slots)
 
     def _on_identity(self, identity: str) -> None:
         resource = ""

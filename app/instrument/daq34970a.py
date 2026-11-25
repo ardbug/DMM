@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from app.constants import OVLD_THRESHOLD
 from app.domain.models import InstrumentStatus, Reading, SerialSettings
 from app.domain.functions import FunctionInfo
+from app.instrument.daq_modules import SlotInfo, parse_slot
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +57,10 @@ class DaqConfig:
     post_scan_wait: float = 0.0
 
 
-def parse_channels(spec: str) -> list[int]:
+def parse_channels(
+    spec: str,
+    allowed: set[int] | None = None,
+) -> list[int]:
     channels: list[int] = []
     for part in spec.replace("，", ",").split(","):
         part = part.strip()
@@ -77,7 +81,9 @@ def parse_channels(spec: str) -> list[int]:
             except ValueError as exc:
                 raise ValueError(f"非法通道：{part}") from exc
         for channel in values:
-            if not 101 <= channel <= 122:
+            if allowed is not None and channel not in allowed:
+                raise ValueError(f"通道不在已安装模块范围内：{channel}")
+            if not 101 <= channel <= 399:
                 raise ValueError(f"通道超出范围：{channel}")
             if channel not in channels:
                 channels.append(channel)
@@ -109,6 +115,8 @@ class Daq34970A:
         self.identity = ""
         self.local_only = False
         self.status: InstrumentStatus | None = None
+        self.slots: list[SlotInfo] = []
+        self.current_channels: set[int] = set()
 
     @property
     def is_open(self) -> bool:
@@ -138,11 +146,49 @@ class Daq34970A:
         self.interface = settings.interface
         self.local_only = True
 
+    def read_slots(self) -> list[SlotInfo]:
+        slots: list[SlotInfo] = []
+        for slot in (100, 200, 300):
+            try:
+                raw = self._io.query_line(
+                    f"SYST:CTYP? {slot}", 3000
+                )
+                info = parse_slot(slot, raw)
+            except Exception:
+                info = parse_slot(slot, "")
+            slots.append(info)
+        self.slots = slots
+        self.current_channels = {
+            channel
+            for item in slots
+            for channel in item.current_channels
+        }
+        return slots
+
+    def allowed_channels(self) -> set[int] | None:
+        if not self.slots:
+            return None
+        channels = {
+            channel
+            for item in self.slots
+            for channel in item.channels
+        }
+        return channels or None
+
     def configure(self, config: DaqConfig) -> None:
         if config.scan:
             self._configure_scan(config)
             return
         channel = int(config.channel)
+        allowed = self.allowed_channels()
+        if allowed is not None and channel not in allowed:
+            raise ValueError(f"通道 {channel} 不在已安装模块范围内")
+        current_set = self.current_channels or {121, 122}
+        if channel in current_set and config.function not in {
+            "CURR:DC",
+            "CURR:AC",
+        }:
+            raise ValueError("电流通道只能测量电流")
         if config.function == "TEMP":
             conf = _TEMP_CONF.get(config.temperature, "CONF:TEMP TC,K")
             self._io.write_line(f"{conf},(@{channel})")
@@ -177,12 +223,15 @@ class Daq34970A:
             )
 
     def _configure_scan(self, config: DaqConfig) -> None:
-        channels = parse_channels(config.scan_list)
-        current = [ch for ch in channels if ch >= 121]
+        channels = parse_channels(
+            config.scan_list, self.allowed_channels()
+        )
+        current_set = self.current_channels or {121, 122}
+        current = [ch for ch in channels if ch in current_set]
         if current and len(current) != len(channels):
-            raise ValueError("扫描列表不能混用电流通道 121/122 和复用通道")
+            raise ValueError("扫描列表不能混用电流通道和复用通道")
         if current and config.function not in {"CURR:DC", "CURR:AC"}:
-            raise ValueError("通道 121/122 只能扫描电流")
+            raise ValueError("电流通道只能扫描电流")
         channel_spec = _format_channels(channels)
         if config.function == "TEMP":
             conf = _TEMP_CONF.get(config.temperature, "CONF:TEMP TC,K")

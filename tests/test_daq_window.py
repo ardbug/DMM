@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QApplication
 
 from app.config import AppConfig
 from app.domain.models import Reading
+from app.instrument.daq_modules import parse_slot
 from app.ui.daq_window import DaqWindow
 
 
@@ -37,6 +38,14 @@ def test_daq_window_builds_with_gpib_default(tmp_path) -> None:
         )
     )
     assert "1" in window.readout.count_label.text()
+    window._on_slots_detected([
+        parse_slot(100, "HEWLETT-PACKARD,34901A,0,2.3"),
+        parse_slot(200, "HEWLETT-PACKARD,0,0,0"),
+        parse_slot(300, "HEWLETT-PACKARD,0,0,0"),
+    ])
+    assert window.params.channel.minimum() == 101
+    assert window.params.channel.maximum() == 122
+    assert window.params.scan_list.count() == 22
     window.single_trend.set_record_view(True)
     assert window.single_trend.record_view_active is True
     window.single_trend.set_record_view(False)

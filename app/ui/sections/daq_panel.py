@@ -13,11 +13,14 @@ from PySide6.QtWidgets import (
     QFrame,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QPushButton,
     QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -120,6 +123,29 @@ class DaqConnectionPanel(QFrame):
         connection_layout.addLayout(buttons)
         root.addWidget(self.connection_box)
 
+        root.addWidget(QLabel("模块信息", self))
+        self.slot_table = QTableWidget(3, 3, self)
+        self.slot_table.setHorizontalHeaderLabels(
+            ["槽位", "模块", "通道"]
+        )
+        self.slot_table.verticalHeader().setVisible(False)
+        self.slot_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.slot_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        self.slot_table.setMaximumHeight(112)
+        for row, slot in enumerate((100, 200, 300)):
+            self.slot_table.setItem(
+                row, 0, QTableWidgetItem(f"Slot {slot}")
+            )
+            self.slot_table.setItem(
+                row, 1, QTableWidgetItem("未读取")
+            )
+            self.slot_table.setItem(row, 2, QTableWidgetItem("—"))
+        root.addWidget(self.slot_table)
+
         root.addWidget(QLabel("数据记录", self))
         csv_row = QHBoxLayout()
         self.csv_btn = QPushButton("开始记录 CSV", self)
@@ -193,6 +219,20 @@ class DaqConnectionPanel(QFrame):
         if detail:
             self.status.setText(detail)
 
+    def set_slots(self, slots) -> None:
+        by_slot = {item.slot: item for item in slots}
+        for row, slot in enumerate((100, 200, 300)):
+            info = by_slot.get(slot)
+            self.slot_table.item(row, 1).setText(
+                info.label if info is not None else "Empty"
+            )
+            channel_text = (
+                info.channel_text if info is not None else "—"
+            )
+            if channel_text != "—":
+                channel_text = f"ch {channel_text}"
+            self.slot_table.item(row, 2).setText(channel_text)
+
     def set_csv_state(self, recording: bool, path: str = "") -> None:
         self.csv_btn.setChecked(recording)
         self.csv_btn.setText("停止记录 CSV" if recording else "开始记录 CSV")
@@ -213,6 +253,8 @@ class DaqParamsPanel(QFrame):
         self.setMinimumWidth(255)
         self.setMaximumWidth(330)
         self._state = "disconnected"
+        self._current_channels = {121, 122}
+        self._available_channels = tuple(range(101, 123))
 
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 14, 12, 12)
@@ -431,10 +473,62 @@ class DaqParamsPanel(QFrame):
         self._temp_sensor_label.setVisible(temp)
         self._temp_unit_label.setVisible(temp)
 
+    def set_slots(self, slots) -> None:
+        channels = sorted(
+            channel for item in slots for channel in item.channels
+        )
+        if not channels:
+            return
+        selected = {
+            int(self.scan_list.item(index).data(Qt.ItemDataRole.UserRole))
+            for index in range(self.scan_list.count())
+            if self.scan_list.item(index).checkState()
+            == Qt.CheckState.Checked
+        }
+        self._available_channels = tuple(channels)
+        self._current_channels = {
+            channel for item in slots for channel in item.current_channels
+        }
+        self.channel.blockSignals(True)
+        self.channel.setRange(channels[0], channels[-1])
+        if self.channel.value() not in channels:
+            self.channel.setValue(channels[0])
+        self.channel.blockSignals(False)
+
+        self.scan_list.blockSignals(True)
+        self.scan_list.clear()
+        for channel in channels:
+            label = (
+                f"{channel}  电流"
+                if channel in self._current_channels
+                else str(channel)
+            )
+            item = QListWidgetItem(label, self.scan_list)
+            item.setData(Qt.ItemDataRole.UserRole, channel)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            checked = channel in selected
+            item.setCheckState(
+                Qt.CheckState.Checked
+                if checked
+                else Qt.CheckState.Unchecked
+            )
+        if not any(
+            self.scan_list.item(index).checkState()
+            == Qt.CheckState.Checked
+            for index in range(self.scan_list.count())
+        ):
+            for index in range(min(10, self.scan_list.count())):
+                self.scan_list.item(index).setCheckState(
+                    Qt.CheckState.Checked
+                )
+        self.scan_list.blockSignals(False)
+        self._sync_channel()
+        self._persist_parameters()
+
     def _sync_channel(self) -> None:
         if self.scan_check.isChecked():
             return
-        current_only = self.channel.value() >= 121
+        current_only = self.channel.value() in self._current_channels
         for index in range(self.function.count()):
             value = self.function.itemData(index)
             allowed = (value in {"CURR:DC", "CURR:AC"}) if current_only else True
@@ -470,7 +564,10 @@ class DaqParamsPanel(QFrame):
     def config(self) -> DaqConfig:
         channel = int(self.channel.value())
         function = str(self.function.currentData())
-        if not self.scan_check.isChecked() and channel in {121, 122}:
+        if (
+            not self.scan_check.isChecked()
+            and channel in self._current_channels
+        ):
             if function not in {"CURR:DC", "CURR:AC"}:
                 function = "CURR:DC"
         return DaqConfig(
