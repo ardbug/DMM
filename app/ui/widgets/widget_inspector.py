@@ -23,6 +23,10 @@ class WidgetInspector(QObject):
         self._timer.setInterval(100)
         self._timer.timeout.connect(self._sample)
 
+    @property
+    def current_text(self) -> str:
+        return self._last
+
     def set_enabled(self, enabled: bool) -> None:
         self._enabled = enabled
         if enabled:

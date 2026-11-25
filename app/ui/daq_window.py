@@ -20,6 +20,7 @@ from PySide6.QtGui import (
     QShortcut,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -236,6 +237,13 @@ class DaqWindow(QMainWindow):
         self.widget_inspector = WidgetInspector(
             self._show_widget_details, self
         )
+        self.inspect_copy_shortcut = QShortcut(
+            QKeySequence.StandardKey.Copy, self
+        )
+        self.inspect_copy_shortcut.setEnabled(False)
+        self.inspect_copy_shortcut.activated.connect(
+            self._copy_widget_details
+        )
 
         file_menu = self.menuBar().addMenu("文件(&F)")
         location_action = QAction("更改 CSV 存储位置...", self)
@@ -441,9 +449,18 @@ class DaqWindow(QMainWindow):
         self.inspect_label.setText(text)
         self.inspect_label.setToolTip(text)
 
+    def _copy_widget_details(self) -> None:
+        text = self.widget_inspector.current_text or self.inspect_label.text()
+        if not text:
+            self.statusBar().showMessage("没有可复制的控件名称", 1500)
+            return
+        QApplication.clipboard().setText(text)
+        self.statusBar().showMessage("已复制控件名称", 1500)
+
     def _toggle_widget_inspector(self, enabled: bool) -> None:
         self.inspect_label.setVisible(enabled)
         self.widget_inspector.set_enabled(enabled)
+        self.inspect_copy_shortcut.setEnabled(enabled)
         if not enabled:
             self.inspect_label.clear()
 
