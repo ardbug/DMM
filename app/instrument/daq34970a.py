@@ -284,7 +284,7 @@ class Daq34970A:
         text = command.strip()
         if not text:
             return ""
-        if text.endswith("?"):
+        if "?" in text:
             return self._io.query_line(text, 5000)
         self._io.write_line(text)
         return ""

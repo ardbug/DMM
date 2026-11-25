@@ -90,7 +90,7 @@ class ScpiDialog(QDialog):
     def append_result(self, command: str, response: str) -> None:
         text = response.strip()
         if not text:
-            text = "(无响应)"
+            text = "(无响应)" if "?" in command else "已发送"
         self.log.appendPlainText(f"{command}  ->  {text}\n")
         self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().maximum())
 
