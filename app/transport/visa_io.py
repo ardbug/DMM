@@ -145,7 +145,7 @@ class VisaIO:
             serial_log.record("RX", raw_bytes)
         text = raw_bytes.decode("ascii", errors="replace").strip()
         if not text:
-            raise VisaIOError("仪器返回空行")
+            raise VisaIOError("读取超时或仪器未返回数据")
         return text
 
     def query_line(self, command: str, timeout_ms: int | None = None) -> str:

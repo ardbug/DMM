@@ -286,6 +286,13 @@ class Daq34970A:
         self._io.write_line(text)
         return ""
 
+    def recover(self) -> None:
+        """清掉迟到的 READ? 响应，恢复 GPIB/串口到可继续采集的状态。"""
+        self._io.clear()
+        self._io.flush()
+        self._io.write_line("*CLS")
+        self._io.query_line("*IDN?", 3000)
+
     def set_nplc(self, config: DaqConfig) -> None:
         """只更新积分时间，不重发 CONF/ROUT:SCAN，避免量程/通道继电器动作。"""
         if config.function in {"FREQ", "PER"}:

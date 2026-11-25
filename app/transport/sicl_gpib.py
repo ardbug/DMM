@@ -165,7 +165,7 @@ class SiclGpibIO:
         raw = text.encode("ascii", errors="replace") + b"\n"
         serial_log.record("RX", raw)
         if not text:
-            raise SiclGpibError("仪器返回空行")
+            raise SiclGpibError("读取超时或仪器未返回数据")
         return text
 
     def query_line(self, command: str, timeout_ms: int | None = None) -> str:

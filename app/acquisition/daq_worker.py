@@ -31,6 +31,7 @@ class DaqWorker(QThread):
         self._last_hardware_config: DaqConfig | None = None
         self._acquiring = False
         self._shutdown = False
+        self._read_recovered = False
 
     def submit(self, kind: str, payload=None) -> None:
         self._commands.put((kind, payload))
@@ -192,7 +193,7 @@ class DaqWorker(QThread):
                     self.reading_received.emit(samples[-1][1])
                 return
             reading = self._device.read(
-                5000,
+                15000,
                 self._config.channel if self._config else 1,
             )
             reading = reading.__class__(
@@ -204,12 +205,29 @@ class DaqWorker(QThread):
                 timestamp_ns=time.time_ns(),
             )
             self.reading_received.emit(reading)
+            self._read_recovered = False
         except Exception as exc:
+            if self._recover_read_failure():
+                self.error_occurred.emit(
+                    "34970A 读数超时",
+                    "仪器未按时返回，已清总线并继续采集",
+                )
+                return
             self.error_occurred.emit("34970A 读数失败", str(exc))
             self._acquiring = False
             self._set_error_state(str(exc))
         finally:
             self.read_activity.emit(False)
+
+    def _recover_read_failure(self) -> bool:
+        if self._read_recovered or self._device is None:
+            return False
+        self._read_recovered = True
+        try:
+            self._device.recover()
+            return True
+        except Exception:
+            return False
 
     def _set_state(self, state: str, detail: str) -> None:
         self.state_changed.emit(state, detail)
