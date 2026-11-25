@@ -277,6 +277,15 @@ class Daq34970A:
             channel=channel,
         )
 
+    def scpi(self, command: str) -> str:
+        text = command.strip()
+        if not text:
+            return ""
+        if text.endswith("?"):
+            return self._io.query_line(text, 5000)
+        self._io.write_line(text)
+        return ""
+
     def set_nplc(self, config: DaqConfig) -> None:
         """只更新积分时间，不重发 CONF/ROUT:SCAN，避免量程/通道继电器动作。"""
         if config.function in {"FREQ", "PER"}:

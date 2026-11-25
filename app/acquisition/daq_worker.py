@@ -20,6 +20,7 @@ class DaqWorker(QThread):
     error_occurred = Signal(str, str)
     status_updated = Signal(object)
     read_activity = Signal(bool)
+    scpi_result = Signal(str, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -141,6 +142,13 @@ class DaqWorker(QThread):
             if self._device is None:
                 raise RuntimeError("34970A 未打开")
             self._device.set_remote(bool(payload))
+        elif kind == "scpi":
+            if self._device is None:
+                raise RuntimeError("34970A 未打开")
+            command = str(payload)
+            self.scpi_result.emit(
+                command, self._device.scpi(command)
+            )
         elif kind == "shutdown":
             self._acquiring = False
             device, self._device = self._device, None

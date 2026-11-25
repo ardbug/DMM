@@ -44,6 +44,7 @@ from app.acquisition.daq_worker import DaqWorker
 from app.acquisition.ring_buffer import RingBuffer
 
 from app.config import AppConfig
+from app.domain.functions import nplc_to_digits
 from app.domain.models import (
     AcquisitionConfig,
     Batch,
@@ -53,6 +54,9 @@ from app.domain.models import (
 from app.domain.statistics import StatsAccumulator
 from app.instrument.daq34970a import DaqConfig, parse_channels
 from app.storage.csv_writer import CsvQueueFull, CsvWriter, make_csv_path
+from app.ui.dialogs.error_code_dialog import ErrorCodeDialog
+from app.ui.dialogs.log_dialogs import SerialLogDialog, SoftwareLogDialog
+from app.ui.dialogs.scpi_dialog import ScpiDialog
 from app.ui.sections.daq_panel import DaqConnectionPanel, DaqParamsPanel
 from app.ui.sections.readout_panel import ReadoutPanel
 from app.ui.sections.trend_panel import TrendPanel
@@ -68,6 +72,10 @@ class DaqWindow(QMainWindow):
         self._single_ring = RingBuffer()
         self._single_stats = StatsAccumulator()
         self._channel_rings: dict[int, RingBuffer] = {}
+        self._scpi_dialog: ScpiDialog | None = None
+        self._error_code_dialog: ErrorCodeDialog | None = None
+        self._software_log_dialog: SoftwareLogDialog | None = None
+        self._serial_log_dialog: SerialLogDialog | None = None
 
         self._worker = DaqWorker()
         self._csv: CsvWriter | None = None
@@ -100,6 +108,7 @@ class DaqWindow(QMainWindow):
         self.params = DaqParamsPanel(config, splitter)
         center = QSplitter(Qt.Orientation.Vertical, splitter)
         self.readout = ReadoutPanel(center)
+        self.readout.set_digits(nplc_to_digits(1.0))
         self.readout.set_daq_mode(True, 1.0)
         self.readout.set_daq_channels(1)
         self.trend_tab = QWidget(center)
@@ -262,6 +271,21 @@ class DaqWindow(QMainWindow):
             self.size_group.addAction(action)
             size_menu.addAction(action)
 
+        tools_menu = self.menuBar().addMenu("工具(&T)")
+        scpi_action = QAction("SCPI 终端...", self)
+        scpi_action.triggered.connect(self._open_scpi)
+        tools_menu.addAction(scpi_action)
+        error_action = QAction("错误码查询...", self)
+        error_action.triggered.connect(self._open_error_codes)
+        tools_menu.addAction(error_action)
+        logs_menu = tools_menu.addMenu("日志")
+        software_log_action = QAction("软件日志", self)
+        software_log_action.triggered.connect(self._open_software_log)
+        logs_menu.addAction(software_log_action)
+        serial_log_action = QAction("串口日志", self)
+        serial_log_action.triggered.connect(self._open_serial_log)
+        logs_menu.addAction(serial_log_action)
+
         instrument_menu = self.menuBar().addMenu("仪器控制(&I)")
         self.rmt_action = QAction("RMT 远程控制", self)
         self.rmt_action.setCheckable(True)
@@ -300,6 +324,7 @@ class DaqWindow(QMainWindow):
         self.panel.open_csv_folder_requested.connect(self._open_csv_folder)
         self._worker.reading_received.connect(self._on_reading)
         self._worker.scan_received.connect(self._on_scan)
+        self._worker.scpi_result.connect(self._on_scpi_result)
         self._worker.state_changed.connect(self._on_state)
         self._worker.status_updated.connect(self.readout.set_status)
         self._worker.error_occurred.connect(self._on_error)
@@ -309,6 +334,54 @@ class DaqWindow(QMainWindow):
         self._timer.setInterval(200)
         self._timer.timeout.connect(self._refresh_trend)
         self._timer.start()
+
+    def _open_scpi(self) -> None:
+        if self._scpi_dialog is None:
+            self._scpi_dialog = ScpiDialog(self)
+            self._scpi_dialog.send_requested.connect(self._send_scpi)
+        self._scpi_dialog.show()
+        self._scpi_dialog.raise_()
+        self._scpi_dialog.activateWindow()
+
+    def _send_scpi(self, command: str) -> None:
+        if self._state not in {"ready", "acquiring"}:
+            self._on_error("SCPI", "请先打开 34970A 连接")
+            return
+        self._worker.submit("scpi", command)
+
+    def _on_scpi_result(self, command: str, response: str) -> None:
+        if self._scpi_dialog is not None:
+            self._scpi_dialog.append_result(command, response)
+
+    def _open_error_codes(self) -> None:
+        if (
+            self._error_code_dialog is None
+            or not self._error_code_dialog.isVisible()
+        ):
+            self._error_code_dialog = ErrorCodeDialog(self)
+        self._error_code_dialog.show()
+        self._error_code_dialog.raise_()
+        self._error_code_dialog.activateWindow()
+
+    def _open_software_log(self) -> None:
+        if (
+            self._software_log_dialog is None
+            or not self._software_log_dialog.isVisible()
+        ):
+            self._software_log_dialog = SoftwareLogDialog(self)
+        self._software_log_dialog.show()
+        self._software_log_dialog.raise_()
+        self._software_log_dialog.activateWindow()
+
+    def _open_serial_log(self) -> None:
+        if (
+            self._serial_log_dialog is None
+            or not self._serial_log_dialog.isVisible()
+        ):
+            self._serial_log_dialog = SerialLogDialog(self)
+        self._serial_log_dialog.show()
+        self._serial_log_dialog.raise_()
+        self._serial_log_dialog.activateWindow()
 
     def _apply_window_scale(self, percent: int) -> None:
         self.resize(
@@ -453,9 +526,13 @@ class DaqWindow(QMainWindow):
         if elapsed > 0.2:
             self.readout.set_rate(self._reading_count / elapsed)
 
+    def _sync_readout_digits(self, nplc: float) -> None:
+        self.readout.set_digits(nplc_to_digits(nplc))
+        self.readout.set_daq_mode(True, nplc)
+
     def _start(self, config: DaqConfig) -> None:
         self._last_config = config
-        self.readout.set_daq_mode(True, config.nplc)
+        self._sync_readout_digits(config.nplc)
         self.readout.set_daq_channels(self.params.selected_channel_count())
         if self._state == "acquiring":
             self._worker.submit("stop")
@@ -466,7 +543,7 @@ class DaqWindow(QMainWindow):
 
     def _on_config_changed(self) -> None:
         config = self.params.config()
-        self.readout.set_daq_mode(True, config.nplc)
+        self._sync_readout_digits(config.nplc)
         self.readout.set_daq_channels(self.params.selected_channel_count())
         self._select_trend_page(config)
         channels = self._config_channels(config)
@@ -494,7 +571,7 @@ class DaqWindow(QMainWindow):
             return
         config = self.params.config()
         self._last_config = config
-        self.readout.set_daq_mode(True, config.nplc)
+        self._sync_readout_digits(config.nplc)
         self.readout.set_daq_channels(self.params.selected_channel_count())
         self._worker.submit("start", config)
 

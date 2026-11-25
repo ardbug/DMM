@@ -119,6 +119,8 @@ class DaqConnectionPanel(QFrame):
         root.addWidget(QLabel("数据记录", self))
         csv_row = QHBoxLayout()
         self.csv_btn = QPushButton("开始记录 CSV", self)
+        self.csv_btn.setObjectName("RecordButton")
+        self.csv_btn.setCheckable(True)
         self.csv_btn.clicked.connect(self.csv_toggle_requested)
         self.csv_folder_btn = QPushButton("文件夹", self)
         self.csv_folder_btn.clicked.connect(self.open_csv_folder_requested)
@@ -188,6 +190,7 @@ class DaqConnectionPanel(QFrame):
             self.status.setText(detail)
 
     def set_csv_state(self, recording: bool, path: str = "") -> None:
+        self.csv_btn.setChecked(recording)
         self.csv_btn.setText("停止记录 CSV" if recording else "开始记录 CSV")
         self.csv_label.setText(path or "未记录")
 
