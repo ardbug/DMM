@@ -43,7 +43,7 @@ def test_thermocouple_k_configuration() -> None:
     assert reading.value == 1.25
 
 
-def test_rtd_4wire_configuration() -> None:
+def test_rtd_2wire_configuration() -> None:
     io = FakeIo()
     device = Daq34970A(io)
     device.open(SerialSettings(resource="gpib0,9", interface="gpib"))
@@ -51,11 +51,11 @@ def test_rtd_4wire_configuration() -> None:
         DaqConfig(
             channel=103,
             function="TEMP",
-            temperature="RTD:4W:100",
+            temperature="RTD:2W:100",
             nplc=10,
         )
     )
-    assert "CONF:TEMP FRTD,85,(@103)" in io.writes
+    assert "CONF:TEMP RTD,85,(@103)" in io.writes
     assert "SENS:TEMP:NPLC 10,(@103)" in io.writes
 
 
@@ -67,10 +67,10 @@ def test_rtd_1000_type_sets_nominal_resistance() -> None:
         DaqConfig(
             channel=104,
             function="TEMP",
-            temperature="RTD:4W:1000",
+            temperature="RTD:2W:1000",
         )
     )
-    assert "SENS:TEMP:TRAN:FRTD:RES 1000,(@104)" in io.writes
+    assert "SENS:TEMP:TRAN:RTD:RES 1000,(@104)" in io.writes
 
 
 def test_parse_scan_channels() -> None:

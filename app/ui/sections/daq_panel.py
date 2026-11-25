@@ -46,8 +46,6 @@ _TEMPS = (
     ("K 型热电偶", "TC:K"),
     ("PT100 2W", "RTD:2W:100"),
     ("PT1000 2W", "RTD:2W:1000"),
-    ("PT100 4W", "RTD:4W:100"),
-    ("PT1000 4W", "RTD:4W:1000"),
     ("热敏电阻 5k", "THERM:5000"),
 )
 
@@ -642,6 +640,11 @@ class DaqParamsPanel(QFrame):
             channel for item in slots for channel in item.channels
         )
         if not channels:
+            self.scan_table.setRowCount(0)
+            self.scan_config.setEnabled(False)
+            self._scan_specs.clear()
+            self._saved_enabled = set()
+            self._persist_parameters()
             return
         existing = set(self._scan_specs)
         for channel in list(self._scan_specs):

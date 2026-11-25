@@ -38,8 +38,6 @@ _TEMP_CONF = {
     "TC:K": "CONF:TEMP TC,K",
     "RTD:2W:100": "CONF:TEMP RTD,85",
     "RTD:2W:1000": "CONF:TEMP RTD,85",
-    "RTD:4W:100": "CONF:TEMP FRTD,85",
-    "RTD:4W:1000": "CONF:TEMP FRTD,85",
     "THERM:5000": "CONF:TEMP THER,5000",
 }
 
@@ -200,14 +198,9 @@ class Daq34970A:
             conf = _TEMP_CONF.get(config.temperature, "CONF:TEMP TC,K")
             self._io.write_line(f"{conf},(@{channel})")
             if config.temperature.endswith(":1000"):
-                if config.temperature.startswith("RTD:4W"):
-                    self._io.write_line(
-                        f"SENS:TEMP:TRAN:FRTD:RES 1000,(@{channel})"
-                    )
-                else:
-                    self._io.write_line(
-                        f"SENS:TEMP:TRAN:RTD:RES 1000,(@{channel})"
-                    )
+                self._io.write_line(
+                    f"SENS:TEMP:TRAN:RTD:RES 1000,(@{channel})"
+                )
             self._io.write_line(f"UNIT:TEMP {config.temp_unit},(@{channel})")
             self._io.write_line(f"SENS:TEMP:NPLC {config.nplc:g},(@{channel})")
             self.status = InstrumentStatus(
@@ -263,14 +256,9 @@ class Daq34970A:
                 )
                 self._io.write_line(f"{conf},(@{channel_spec})")
                 if config.temperature.endswith(":1000"):
-                    if config.temperature.startswith("RTD:4W"):
-                        self._io.write_line(
-                            f"SENS:TEMP:TRAN:FRTD:RES 1000,(@{channel_spec})"
-                        )
-                    else:
-                        self._io.write_line(
-                            f"SENS:TEMP:TRAN:RTD:RES 1000,(@{channel_spec})"
-                        )
+                    self._io.write_line(
+                        f"SENS:TEMP:TRAN:RTD:RES 1000,(@{channel_spec})"
+                    )
                 self._io.write_line(
                     f"UNIT:TEMP {config.temp_unit},(@{channel_spec})"
                 )

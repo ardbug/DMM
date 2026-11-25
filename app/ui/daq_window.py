@@ -665,6 +665,9 @@ class DaqWindow(QMainWindow):
         self.readout.set_daq_mode(True, nplc)
 
     def _start(self, config: DaqConfig) -> None:
+        if config.scan and not config.channels:
+            self._on_error("扫描", "请至少勾选一个扫描通道")
+            return
         self._last_config = config
         self._sync_readout_digits(config.nplc)
         self.readout.set_daq_channels(self.params.selected_channel_count())
