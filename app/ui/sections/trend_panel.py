@@ -212,7 +212,8 @@ class TrendPanel(QFrame):
         return self._record_view_active
 
     def set_record_view(self, active: bool) -> None:
-        self._record_view_active = bool(active)
+        record_view = bool(active)
+        self._record_view_active = record_view
         for widget in (
             self.window_combo,
             self.ovld_check,

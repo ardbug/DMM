@@ -37,6 +37,10 @@ def test_daq_window_builds_with_gpib_default(tmp_path) -> None:
         )
     )
     assert "1" in window.readout.count_label.text()
+    window.single_trend.set_record_view(True)
+    assert window.single_trend.record_view_active is True
+    window.single_trend.set_record_view(False)
+    assert window.single_trend.record_view_active is False
     window.close()
 
 
