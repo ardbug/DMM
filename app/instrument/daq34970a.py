@@ -18,8 +18,8 @@ def _info(raw: str, label: str, unit: str) -> FunctionInfo:
 
 
 _FUNCTIONS = {
-    "VOLT:DC": _info("VOLT:DC", "DCV", "V"),
-    "VOLT:AC": _info("VOLT:AC", "ACV", "V"),
+    "VOLT:DC": _info("VOLT:DC", "VDC", "V"),
+    "VOLT:AC": _info("VOLT:AC", "VAC", "V"),
     "RES": _info("RES", "2WΩ", "Ω"),
     "FRES": _info("FRES", "4WΩ", "Ω"),
     "CURR:DC": _info("CURR:DC", "DCI", "A"),

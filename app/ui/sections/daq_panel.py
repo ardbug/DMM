@@ -91,20 +91,24 @@ class DaqConnectionPanel(QFrame):
         self.interface.setCurrentIndex(
             self.interface.findData(self._settings.interface)
         )
-        root.addWidget(QLabel("接口", self))
-        root.addWidget(self.interface)
+        self.connection_box = QWidget(self)
+        connection_layout = QVBoxLayout(self.connection_box)
+        connection_layout.setContentsMargins(0, 0, 0, 0)
+        connection_layout.setSpacing(6)
+        connection_layout.addWidget(QLabel("接口", self))
+        connection_layout.addWidget(self.interface)
 
         self.resource = ThemedComboBox(self)
         self.resource.setEditable(True)
         self.resource.addItem(self._settings.resource)
         self.resource.setCurrentText(self._settings.resource)
         self.resource_label = QLabel("GPIB 地址", self)
-        root.addWidget(self.resource_label)
-        root.addWidget(self.resource)
+        connection_layout.addWidget(self.resource_label)
+        connection_layout.addWidget(self.resource)
 
         self.settings_btn = QPushButton("连接设置…", self)
         self.settings_btn.clicked.connect(self._edit_settings)
-        root.addWidget(self.settings_btn)
+        connection_layout.addWidget(self.settings_btn)
 
         buttons = QHBoxLayout()
         self.open_btn = QPushButton("打开连接", self)
@@ -114,7 +118,8 @@ class DaqConnectionPanel(QFrame):
         self.close_btn.clicked.connect(self.close_requested)
         buttons.addWidget(self.open_btn)
         buttons.addWidget(self.close_btn)
-        root.addLayout(buttons)
+        connection_layout.addLayout(buttons)
+        root.addWidget(self.connection_box)
 
         root.addWidget(QLabel("数据记录", self))
         csv_row = QHBoxLayout()
@@ -179,6 +184,7 @@ class DaqConnectionPanel(QFrame):
     def set_state(self, state: str, detail: str = "") -> None:
         self._state = state
         connected = state in {"ready", "acquiring", "stopping"}
+        self.connection_box.setVisible(not connected)
         self.interface.setEnabled(state in {"disconnected", "error"})
         self.resource.setEnabled(state in {"disconnected", "error"})
         self.settings_btn.setEnabled(state in {"disconnected", "error"})

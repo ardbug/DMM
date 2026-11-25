@@ -294,14 +294,6 @@ class DaqWindow(QMainWindow):
             self.line_width_group.addAction(action)
             width_menu.addAction(action)
 
-        comm_menu = self.menuBar().addMenu("通信(&C)")
-        settings_action = QAction("连接设置...", self)
-        settings_action.triggered.connect(self.panel._edit_settings)
-        comm_menu.addAction(settings_action)
-        self.comm_open_action = QAction("打开连接", self)
-        self.comm_open_action.triggered.connect(self._toggle_connection)
-        comm_menu.addAction(self.comm_open_action)
-
         tools_menu = self.menuBar().addMenu("工具(&T)")
         scpi_action = QAction("SCPI 终端...", self)
         scpi_action.triggered.connect(self._open_scpi)
@@ -316,6 +308,14 @@ class DaqWindow(QMainWindow):
         serial_log_action = QAction("串口日志", self)
         serial_log_action.triggered.connect(self._open_serial_log)
         logs_menu.addAction(serial_log_action)
+
+        comm_menu = self.menuBar().addMenu("通信(&C)")
+        settings_action = QAction("连接设置...", self)
+        settings_action.triggered.connect(self.panel._edit_settings)
+        comm_menu.addAction(settings_action)
+        self.comm_open_action = QAction("打开连接", self)
+        self.comm_open_action.triggered.connect(self._toggle_connection)
+        comm_menu.addAction(self.comm_open_action)
 
         instrument_menu = self.menuBar().addMenu("仪器控制(&I)")
         self.rmt_action = QAction("RMT 远程控制", self)

@@ -31,6 +31,15 @@ from app.ui.widgets.digital_readout import DigitalReadout
 
 _TIER_SHORT = {"24h": "24h", "90d": "90d", "1y": "1yr"}
 _TIER_CYCLE = ("24h", "90d", "1y")
+
+
+def _valid_function_label(label: str) -> bool:
+    """只接受真实测量功能，防止 SCPI 错误串/状态串被当成功能名显示。"""
+    if not label:
+        return False
+    if function_spec_by_label(label) is not None:
+        return True
+    return label in {"TEMP", "温度", "CONT", "DIOD"}
 _UNIT_FACTORS = {"": 1.0, "µ": 1e-6, "m": 1e-3, "k": 1e3, "M": 1e6}
 
 
@@ -334,6 +343,8 @@ class ReadoutPanel(QFrame):
         self.function_badge.setText(status.function.label)
         spec = function_spec_by_label(status.function.label)
         self.chips["FILT"].set_state(bool(spec and spec.supports_ac_filter))
+        if not _valid_function_label(status.function.label):
+            return
         if self._state in {"ready", "reading", "acquiring", "stopping"}:
             self.chips["Rmt"].set_state(True)
         if self._daq_mode:
@@ -454,7 +465,10 @@ class ReadoutPanel(QFrame):
     def _show_reading(self, reading: Reading) -> None:
         self._last_reading = reading
         self._range_reading = reading
-        if self.function_badge.text() != reading.function_label:
+        if (
+            _valid_function_label(reading.function_label)
+            and self.function_badge.text() != reading.function_label
+        ):
             self.function_badge.setText(reading.function_label)
         self.display_updates += 1
         if reading.ovld:
