@@ -124,8 +124,23 @@ class Dmm:
         time.sleep(0.2)
 
     def read_status(self) -> InstrumentStatus:
-        func_raw = self._io.query_line("FUNC?", 3000)
-        info = describe_function(func_raw)
+        func_raw = ""
+        info = None
+        for attempt in range(2):
+            func_raw = self._io.query_line("FUNC?", 3000)
+            info = describe_function(func_raw)
+            if info.query_prefix:
+                break
+            log.warning(
+                "FUNC? 返回异常：%r，串口可能失步；清理输入后重试",
+                func_raw,
+            )
+            if attempt == 0:
+                self._resync_serial_link()
+        if info is None or not info.query_prefix:
+            raise DmmError(
+                f"FUNC? 返回异常：{func_raw!r}；串口可能失步，请重新连接"
+            )
         nplc = ""
         range_text = ""
 
@@ -162,6 +177,17 @@ class Dmm:
             range_text=range_text,
             terminal=terminal,
         )
+
+    def _resync_serial_link(self) -> None:
+        """串口收到残留响应时清理输入并清仪器状态，避免陆续错位。"""
+        try:
+            self._io.clear()
+            self._io.flush()
+            self._io.write_line("*CLS")
+            time.sleep(0.2)
+            self._io.flush()
+        except Exception:
+            log.warning("串口失步清理失败", exc_info=True)
 
     def read_error_queue(self, limit: int = 20) -> list[ScpiError]:
         errors: list[ScpiError] = []
