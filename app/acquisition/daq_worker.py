@@ -21,6 +21,7 @@ class DaqWorker(QThread):
     status_updated = Signal(object)
     read_activity = Signal(bool)
     scpi_result = Signal(str, str)
+    identity_ready = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -89,6 +90,7 @@ class DaqWorker(QThread):
             device.open(settings)
             self._device = device
             self._config = None
+            self.identity_ready.emit(device.identity)
             self._set_state("ready", "34970A 已连接")
         elif kind == "close":
             self._acquiring = False

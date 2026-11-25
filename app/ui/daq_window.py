@@ -17,6 +17,7 @@ from PySide6.QtGui import (
     QCloseEvent,
     QIcon,
     QKeySequence,
+    QShortcut,
 )
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -221,8 +222,16 @@ class DaqWindow(QMainWindow):
         splitter.setSizes([260, 650, 290])
         self.setCentralWidget(central)
         self._splitter = splitter
+        self.status_state = QLabel("34970A 未连接", self)
+        self.status_identity = QLabel("", self)
+        self.statusBar().addWidget(self.status_state)
+        self.statusBar().addPermanentWidget(self.status_identity)
 
         file_menu = self.menuBar().addMenu("文件(&F)")
+        location_action = QAction("更改 CSV 存储位置...", self)
+        location_action.triggered.connect(self._change_csv_directory)
+        file_menu.addAction(location_action)
+        file_menu.addSeparator()
         quit_action = QAction("退出", self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
@@ -270,6 +279,28 @@ class DaqWindow(QMainWindow):
             )
             self.size_group.addAction(action)
             size_menu.addAction(action)
+
+        width_menu = view_menu.addMenu("曲线粗细")
+        self.line_width_group = QActionGroup(self)
+        self.line_width_group.setExclusive(True)
+        for width in (1.0, 1.5, 2.0):
+            action = QAction(f"{width:g} px", self)
+            action.setCheckable(True)
+            action.setChecked(width == 2.0)
+            action.triggered.connect(
+                lambda _checked=False, value=width:
+                self.single_trend.chart.set_line_width(value)
+            )
+            self.line_width_group.addAction(action)
+            width_menu.addAction(action)
+
+        comm_menu = self.menuBar().addMenu("通信(&C)")
+        settings_action = QAction("连接设置...", self)
+        settings_action.triggered.connect(self.panel._edit_settings)
+        comm_menu.addAction(settings_action)
+        self.comm_open_action = QAction("打开连接", self)
+        self.comm_open_action.triggered.connect(self._toggle_connection)
+        comm_menu.addAction(self.comm_open_action)
 
         tools_menu = self.menuBar().addMenu("工具(&T)")
         scpi_action = QAction("SCPI 终端...", self)
@@ -326,6 +357,7 @@ class DaqWindow(QMainWindow):
         self._worker.scan_received.connect(self._on_scan)
         self._worker.scpi_result.connect(self._on_scpi_result)
         self._worker.state_changed.connect(self._on_state)
+        self._worker.identity_ready.connect(self._on_identity)
         self._worker.status_updated.connect(self.readout.set_status)
         self._worker.error_occurred.connect(self._on_error)
         self._worker.start()
@@ -334,6 +366,26 @@ class DaqWindow(QMainWindow):
         self._timer.setInterval(200)
         self._timer.timeout.connect(self._refresh_trend)
         self._timer.start()
+
+    def _toggle_connection(self) -> None:
+        if self._state in {"ready", "acquiring", "stopping", "opening"}:
+            self._close()
+        else:
+            self._open(self.panel.settings())
+
+    def _on_identity(self, identity: str) -> None:
+        self.status_identity.setText(identity)
+
+    def _change_csv_directory(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择 CSV 存储位置",
+            str(self._config.csv_directory()),
+        )
+        if not folder:
+            return
+        self._config.save_csv_directory(folder)
+        self.statusBar().showMessage(f"CSV 存储位置：{folder}", 5000)
 
     def _open_scpi(self) -> None:
         if self._scpi_dialog is None:
@@ -358,7 +410,9 @@ class DaqWindow(QMainWindow):
             self._error_code_dialog is None
             or not self._error_code_dialog.isVisible()
         ):
-            self._error_code_dialog = ErrorCodeDialog(self)
+            self._error_code_dialog = ErrorCodeDialog(
+                self, model="34970A"
+            )
         self._error_code_dialog.show()
         self._error_code_dialog.raise_()
         self._error_code_dialog.activateWindow()
@@ -748,6 +802,9 @@ class DaqWindow(QMainWindow):
         self.readout.set_state(state, detail)
 
         self.statusBar().showMessage(detail)
+        self.status_state.setText(detail or state)
+        connected = state in {"ready", "acquiring", "stopping", "opening"}
+        self.comm_open_action.setText("关闭连接" if connected else "打开连接")
 
     def _on_error(self, title: str, detail: str) -> None:
         self.error_banner.show_error(title, detail)

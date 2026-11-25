@@ -20,7 +20,11 @@ from app.domain.error_codes import filter_error_codes
 
 
 class ErrorCodeDialog(QDialog):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        model: str = "34401A",
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("错误码查询")
         self.resize(720, 560)
@@ -32,6 +36,9 @@ class ErrorCodeDialog(QDialog):
         self.model_combo = QComboBox(self)
         self.model_combo.addItem("34401A", "34401A")
         self.model_combo.addItem("34970A", "34970A")
+        model_index = self.model_combo.findData(model)
+        if model_index >= 0:
+            self.model_combo.setCurrentIndex(model_index)
         top.addWidget(self.model_combo)
         top.addSpacing(8)
         self.search = QLineEdit(self)
