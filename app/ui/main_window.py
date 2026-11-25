@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
         self._record_after_single = False
         self._last_status: InstrumentStatus | None = None
         self._pending_settings: SerialSettings | None = None
+        self._last_open_settings: SerialSettings | None = None
         self._needs_initial_config = False
         self._auto_open_attempted = False
         self._auto_open_pending = False
@@ -335,6 +336,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         # 打开成功后才写入配置，避免把打不开的资源字符串记成下次默认值。
         remote = self._config.remote_enabled() if remote is None else remote
+        self._last_open_settings = settings
         self._pending_settings = settings if save_settings else None
         self._needs_initial_config = remote
         self._single_count = 0
@@ -470,7 +472,21 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, lambda: self._open_connection(self._config.serial_settings()))
 
     def _on_identity(self, identity: str) -> None:
-        self.status_identity.setText(identity)
+        resource = ""
+        if self._last_open_settings is not None:
+            resource = self._last_open_settings.resource
+            upper = resource.upper()
+            if upper.startswith("ASRL"):
+                digits = "".join(ch for ch in resource if ch.isdigit())
+                resource = f"COM{digits}"
+            elif upper.startswith("GPIB"):
+                parts = upper.replace("::", ",").split(",")
+                if len(parts) >= 2 and parts[0].startswith("GPIB"):
+                    resource = f"{parts[0]},{parts[1]}"
+                else:
+                    resource = upper
+        text = f"{identity} on {resource}" if resource else identity
+        self.status_identity.setText(text)
         log.info("IDN：%s", identity)
 
     def _on_status(self, status: InstrumentStatus) -> None:

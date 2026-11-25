@@ -73,6 +73,7 @@ class DaqWindow(QMainWindow):
         self._single_ring = RingBuffer()
         self._single_stats = StatsAccumulator()
         self._channel_rings: dict[int, RingBuffer] = {}
+        self._connect_settings: SerialSettings | None = None
         self._scpi_dialog: ScpiDialog | None = None
         self._error_code_dialog: ErrorCodeDialog | None = None
         self._software_log_dialog: SoftwareLogDialog | None = None
@@ -374,7 +375,21 @@ class DaqWindow(QMainWindow):
             self._open(self.panel.settings())
 
     def _on_identity(self, identity: str) -> None:
-        self.status_identity.setText(identity)
+        resource = ""
+        if self._connect_settings is not None:
+            resource = self._connect_settings.resource
+            upper = resource.upper()
+            if upper.startswith("ASRL"):
+                digits = "".join(ch for ch in resource if ch.isdigit())
+                resource = f"COM{digits}"
+            elif upper.startswith("GPIB"):
+                parts = upper.replace("::", ",").split(",")
+                if len(parts) >= 2 and parts[0].startswith("GPIB"):
+                    resource = f"{parts[0]},{parts[1]}"
+                else:
+                    resource = upper
+        text = f"{identity} on {resource}" if resource else identity
+        self.status_identity.setText(text)
 
     def _change_csv_directory(self) -> None:
         folder = QFileDialog.getExistingDirectory(
@@ -489,6 +504,7 @@ class DaqWindow(QMainWindow):
             self._worker.submit("beeper", enabled)
 
     def _open(self, settings: SerialSettings) -> None:
+        self._connect_settings = settings
         self._config.save_serial_settings(settings)
         self._worker.submit("open", settings)
 
@@ -804,6 +820,8 @@ class DaqWindow(QMainWindow):
         self.statusBar().showMessage(detail)
         self.status_state.setText(detail or state)
         connected = state in {"ready", "acquiring", "stopping", "opening"}
+        if not connected:
+            self.status_identity.clear()
         self.comm_open_action.setText("关闭连接" if connected else "打开连接")
 
     def _on_error(self, title: str, detail: str) -> None:
