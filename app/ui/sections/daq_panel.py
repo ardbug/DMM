@@ -281,6 +281,7 @@ class DaqParamsPanel(QFrame):
         self.channel.setValue(101)
         self.scan_check = QCheckBox("多通道扫描", self)
         form.addRow("通道", self.channel)
+        self._channel_label = form.labelForField(self.channel)
         form.addRow("", self.scan_check)
 
         self.function = ThemedComboBox(self)
@@ -413,6 +414,23 @@ class DaqParamsPanel(QFrame):
         self.scan_table.itemSelectionChanged.connect(
             self._on_selection_changed
         )
+        self.scan_check.setChecked(True)
+        for widget in (
+            self.channel,
+            self.scan_check,
+            self.function,
+            self.nplc,
+            self.rate,
+        ):
+            widget.setVisible(False)
+        for label in (
+            self._channel_label,
+            self._function_label,
+            self._nplc_label,
+            self._rate_label,
+        ):
+            if label is not None:
+                label.setVisible(False)
         self._sync_scan()
         self._sync_function()
         self._sync_channel()
@@ -504,16 +522,8 @@ class DaqParamsPanel(QFrame):
         self.config_changed.emit()
 
     def _sync_scan(self) -> None:
-        scan = self.scan_check.isChecked()
-        self.channel.setEnabled(not scan)
-        self.scan_group.setVisible(scan)
-        self.scan_config.setVisible(scan)
-        self.function.setVisible(not scan)
-        self.nplc.setVisible(not scan)
-        self.rate.setVisible(not scan)
-        self._function_label.setVisible(not scan)
-        self._nplc_label.setVisible(not scan)
-        self._rate_label.setVisible(not scan)
+        self.scan_group.setVisible(True)
+        self.scan_config.setVisible(True)
         self._update_temp_visibility()
 
     def _sync_function(self) -> None:
@@ -669,6 +679,7 @@ class DaqParamsPanel(QFrame):
             str(combo.currentData()),
             spec.count,
         )
+        self._update_temp_visibility()
         self._persist_parameters()
 
     def _on_row_count_changed(self, channel: int, value: int) -> None:
@@ -805,50 +816,27 @@ class DaqParamsPanel(QFrame):
             self.function.setCurrentIndex(self.function.findData("VOLT:DC"))
 
     def config(self) -> DaqConfig:
-        scan = self.scan_check.isChecked()
-        enabled = self._enabled_channels() if scan else []
-        if scan:
-            specs = tuple(
-                self._scan_specs.get(channel, ScanChannelConfig(channel))
-                for channel in enabled
-            )
-            first = specs[0] if specs else ScanChannelConfig(self.channel.value())
-            return DaqConfig(
-                channel=first.channel,
-                function=first.function,
-                nplc=float(self.scan_nplc.currentData()),
-                temperature=str(self.temp_sensor.currentData()),
-                temp_unit=str(self.temp_unit.currentData()),
-                rate=float(self.rate.value()),
-                scan=True,
-                scan_list=",".join(str(channel) for channel in enabled),
-                scan_rate=1000.0,
-                scan_count=max((spec.count for spec in specs), default=1),
-                pre_scan_wait=float(self.pre_scan_wait.value()),
-                post_scan_wait=float(self.post_scan_wait.value()),
-                min_scan_seconds=float(self.min_scan_seconds.value()),
-                channels=specs,
-            )
-        channel = int(self.channel.value())
-        function = str(self.function.currentData())
-        if channel in self._current_channels and function not in {
-            "CURR:DC",
-            "CURR:AC",
-        }:
-            function = "CURR:DC"
+        enabled = self._enabled_channels()
+        specs = tuple(
+            self._scan_specs.get(channel, ScanChannelConfig(channel))
+            for channel in enabled
+        )
+        first = specs[0] if specs else ScanChannelConfig(101)
         return DaqConfig(
-            channel=channel,
-            function=function,
-            nplc=float(self.nplc.currentData()),
+            channel=first.channel,
+            function=first.function,
+            nplc=float(self.scan_nplc.currentData()),
             temperature=str(self.temp_sensor.currentData()),
             temp_unit=str(self.temp_unit.currentData()),
-            rate=float(self.rate.value()),
-            scan=False,
-            scan_list="",
+            rate=1.0,
+            scan=True,
+            scan_list=",".join(str(channel) for channel in enabled),
             scan_rate=1000.0,
+            scan_count=max((spec.count for spec in specs), default=1),
             pre_scan_wait=float(self.pre_scan_wait.value()),
             post_scan_wait=float(self.post_scan_wait.value()),
             min_scan_seconds=float(self.min_scan_seconds.value()),
+            channels=specs,
         )
 
     def selected_channel_count(self) -> int:

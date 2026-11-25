@@ -713,6 +713,20 @@ class DaqWindow(QMainWindow):
         self._worker.submit("stop")
 
     def _single(self, config: DaqConfig) -> None:
+        if config.scan:
+            specs = list(config.channels)
+            if not specs:
+                self._on_error("单次读数", "请先勾选一个扫描通道")
+                return
+            spec = specs[0]
+            config = replace(
+                config,
+                scan=False,
+                channel=spec.channel,
+                function=spec.function,
+                scan_list="",
+                channels=(),
+            )
         self._last_config = config
         self._worker.submit("single", config)
 

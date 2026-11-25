@@ -25,18 +25,20 @@ def test_daq_window_builds_with_gpib_default(tmp_path) -> None:
     assert config.scan is True
     assert config.scan_list.startswith("101,102,103")
     assert window._config.daq_parameters()["scan"] is True
-    window.params.scan_check.setChecked(False)
     window._last_config = window.params.config()
-    window._on_reading(
-        Reading(
-            7.0273,
-            "V",
-            "DCV",
-            False,
-            "0",
-            time.time_ns(),
+    window._on_scan([
+        (
+            101,
+            Reading(
+                7.0273,
+                "V",
+                "DCV",
+                False,
+                "0",
+                time.time_ns(),
+            ),
         )
-    )
+    ])
     assert "1" in window.readout.count_label.text()
     window._on_slots_detected([
         parse_slot(100, "HEWLETT-PACKARD,34901A,0,2.3"),
