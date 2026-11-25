@@ -382,7 +382,12 @@ class MainWindow(QMainWindow):
     def _toggle_connection(self) -> None:
         if self._state in {"disconnected", "error"}:
             self._open_connection(self._config.serial_settings())
-        elif self._state != "opening":
+        elif self._state == "opening":
+            self.status_state.setText("正在取消打开连接…")
+            self.open_action.setText("正在取消…")
+            self.open_action.setEnabled(False)
+            self.controller.close_connection()
+        else:
             self.controller.close_connection()
 
     def _on_rmt_toggled(self, enabled: bool) -> None:
@@ -428,9 +433,12 @@ class MainWindow(QMainWindow):
         if state in {"error", "disconnected"}:
             self._record_after_single = False
         self.status_state.setText(detail)
-        self.open_action.setEnabled(state not in {"opening", "stopping"})
+        self.open_action.setEnabled(state != "stopping")
         if state == "opening":
-            self.open_action.setText("正在打开连接…")
+            self.open_action.setText("取消打开")
+        elif state == "closing":
+            self.open_action.setText("正在关闭…")
+            self.open_action.setEnabled(False)
         elif state in {"local", "ready", "reading", "acquiring", "stopping"}:
             self.open_action.setText("关闭连接")
         else:

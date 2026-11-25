@@ -519,6 +519,11 @@ class DaqWindow(QMainWindow):
             QMessageBox.warning(self, "新开窗口失败", "无法启动新实例")
 
     def _close(self) -> None:
+        if self._state == "opening":
+            self.panel.status.setText("正在取消打开连接…")
+            self.panel.close_btn.setEnabled(False)
+            self.comm_open_action.setText("正在取消…")
+            self.comm_open_action.setEnabled(False)
         self._worker.submit("close")
 
     @staticmethod
