@@ -50,16 +50,6 @@ tools\build_sicl_bridge.bat
 
 编译需要 Visual Studio Build Tools 和 Keysight IO Libraries Suite。桥接程序是本地构建产物，不提交到仓库。
 
-## 界面
-
-- 主读数：大字号数值、单位、精度误差、量程、实际速率
-- 趋势图：全时间范围、像素包络绘制、悬停读数、框选统计
-- 记录列表：序号、时间、读数、备注、参数
-- 左栏：CSV 记录、平均值、悬浮窗、2WΩ 蜂鸣
-
-![界面](docs/阶段5_界面.png)
-
-![记录列表](docs/阶段5_记录列表.png)
 
 ## 平均值
 
